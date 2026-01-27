@@ -30,6 +30,7 @@ import MultiSitesDashboard from './pages/admin/MultiSitesDashboard';
 
 // Pages Syndicat
 import UnionDashboard from './pages/union/UnionDashboard';
+import UnionTicketDetail from './pages/union/UnionTicketDetail';
 
 // Composant de route protégée
 function ProtectedRoute({ children, adminOnly = false }) {
@@ -220,6 +221,14 @@ function App() {
           element={
             <UnionRoute>
               <UnionDashboard />
+            </UnionRoute>
+          }
+        />
+        <Route
+          path="/union/tickets/:id"
+          element={
+            <UnionRoute>
+              <UnionTicketDetail />
             </UnionRoute>
           }
         />

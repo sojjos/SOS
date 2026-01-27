@@ -11,7 +11,7 @@ import {
   XCircle
 } from 'lucide-react';
 import useAuthStore from '../../store/authStore';
-import { ticketsAPI } from '../../services/api';
+import { ticketsAPI, agenciesAPI } from '../../services/api';
 import clsx from 'clsx';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
@@ -24,6 +24,7 @@ function TicketsPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [pagination, setPagination] = useState({ total: 0, page: 1, limit: 20 });
   const [showFilters, setShowFilters] = useState(false);
+  const [problemTypes, setProblemTypes] = useState([]);
 
   // Filtres
   const [filters, setFilters] = useState({
@@ -32,6 +33,20 @@ function TicketsPage() {
     urgency: searchParams.get('urgency') || '',
     problem_type_id: searchParams.get('type') || ''
   });
+
+  // Charger les types de problèmes
+  useEffect(() => {
+    const loadProblemTypes = async () => {
+      if (!currentAgency) return;
+      try {
+        const response = await agenciesAPI.getProblemTypes(currentAgency.id);
+        setProblemTypes(response.data);
+      } catch (error) {
+        console.error('Erreur chargement types de problèmes:', error);
+      }
+    };
+    loadProblemTypes();
+  }, [currentAgency]);
 
   // Charger les tickets
   useEffect(() => {
@@ -151,7 +166,7 @@ function TicketsPage() {
 
         {/* Filtres dépliables */}
         {showFilters && (
-          <div className="grid sm:grid-cols-3 gap-4 mt-4 pt-4 border-t">
+          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-4 pt-4 border-t">
             <div>
               <label className="label">Statut</label>
               <select
@@ -173,6 +188,19 @@ function TicketsPage() {
               >
                 {urgencyOptions.map(opt => (
                   <option key={opt.value} value={opt.value}>{opt.label}</option>
+                ))}
+              </select>
+            </div>
+            <div>
+              <label className="label">Type de problème</label>
+              <select
+                value={filters.problem_type_id}
+                onChange={(e) => handleFilterChange('problem_type_id', e.target.value)}
+                className="input"
+              >
+                <option value="">Tous les types</option>
+                {problemTypes.map(type => (
+                  <option key={type.id} value={type.id}>{type.name}</option>
                 ))}
               </select>
             </div>
@@ -201,11 +229,11 @@ function TicketsPage() {
           <AlertCircle className="w-12 h-12 text-gray-400 mx-auto mb-4" />
           <h3 className="text-lg font-semibold text-gray-900 mb-2">Aucun ticket trouvé</h3>
           <p className="text-gray-600 mb-4">
-            {filters.search || filters.status || filters.urgency
+            {filters.search || filters.status || filters.urgency || filters.problem_type_id
               ? 'Essayez de modifier vos filtres de recherche'
               : 'Commencez par créer votre premier ticket'}
           </p>
-          {!filters.search && !filters.status && !filters.urgency && (
+          {!filters.search && !filters.status && !filters.urgency && !filters.problem_type_id && (
             <Link to="/tickets/new" className="btn btn-primary">
               Créer un ticket
             </Link>

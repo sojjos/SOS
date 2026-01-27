@@ -68,7 +68,7 @@ export const ticketsAPI = {
   validate: (id, data) => api.put(`/tickets/${id}/validate`, data),
   updateStatus: (id, data) => api.put(`/tickets/${id}/status`, data),
   addComment: (id, data) => api.post(`/tickets/${id}/comments`, data),
-  toggleUnionVisibility: (id, visible) => api.put(`/tickets/${id}/visibility`, { visible_to_union: visible }),
+  toggleUnionVisibility: (id, visible) => api.put(`/tickets/${id}/visibility`, { is_visible_union: visible }),
   getHistory: (id) => api.get(`/tickets/${id}/history`),
   getAttachments: (id) => api.get(`/uploads/ticket/${id}`)
 };

@@ -44,14 +44,9 @@ function CreateTicketPage() {
           agenciesAPI.getLocations(currentAgency.id)
         ]);
 
-        // Filtrer les types de problemes selon le niveau si necessaire
-        let filteredTypes = typesRes.data;
-        // Niveau 0 peut ne pas voir certains types (ex: tickets de consultation)
-        if (currentLevel === 0) {
-          filteredTypes = filteredTypes.filter(t => !t.requires_higher_level);
-        }
-
-        setProblemTypes(filteredTypes);
+        // Le backend filtre deja les types selon le niveau de l'utilisateur
+        // via min_level_required, donc on utilise directement la reponse
+        setProblemTypes(typesRes.data);
         setLocations(locationsRes.data);
       } catch (error) {
         console.error('Erreur chargement config:', error);

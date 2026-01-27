@@ -329,6 +329,25 @@ router.post('/', authenticate, [
       userLevel = 999;
     }
 
+    // Vérifier le niveau requis pour le type de problème
+    if (problem_type_id) {
+      const { rows: typeRows } = await query(
+        'SELECT min_level_required FROM problem_types WHERE id = $1 AND agency_id = $2',
+        [problem_type_id, agency_id]
+      );
+
+      if (typeRows.length === 0) {
+        return res.status(400).json({ error: 'Type de problème invalide ou non autorisé pour cette agence' });
+      }
+
+      const minLevelRequired = typeRows[0].min_level_required || 0;
+      if (userLevel < minLevelRequired) {
+        return res.status(403).json({
+          error: `Votre niveau (${userLevel}) ne permet pas de créer ce type de ticket. Niveau minimum requis: ${minLevelRequired}`
+        });
+      }
+    }
+
     // Créer le ticket
     const { rows } = await query(`
       INSERT INTO tickets (

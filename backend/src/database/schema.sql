@@ -121,6 +121,8 @@ CREATE TABLE IF NOT EXISTS problem_types (
     color VARCHAR(7) DEFAULT '#6c757d',
     icon VARCHAR(50),
     is_active BOOLEAN DEFAULT true,
+    -- Niveau minimum requis pour creer ce type de ticket (0 = tout le monde, 1+ = niveaux superieurs)
+    min_level_required INTEGER DEFAULT 0,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(agency_id, name)
 );

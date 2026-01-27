@@ -148,8 +148,8 @@ router.post('/', authenticate, requireAdmin, [
 
       // Copier les types de problèmes
       await query(`
-        INSERT INTO problem_types (agency_id, name, description, color, icon)
-        SELECT $1, name, description, color, icon
+        INSERT INTO problem_types (agency_id, name, description, color, icon, min_level_required)
+        SELECT $1, name, description, color, icon, min_level_required
         FROM problem_types WHERE agency_id = $2
       `, [newAgency.id, copyFromAgencyId]);
 
@@ -205,6 +205,89 @@ router.put('/:id', authenticate, requireAdmin, async (req, res) => {
   } catch (err) {
     console.error('Erreur modification agence:', err);
     res.status(500).json({ error: 'Erreur lors de la modification de l\'agence' });
+  }
+});
+
+// ====================================
+// GESTION DES TYPES DE PROBLEMES
+// ====================================
+
+// GET /api/agencies/:id/problem-types
+router.get('/:id/problem-types', authenticate, requireAgencyAccess('id'), async (req, res) => {
+  try {
+    const user = req.user;
+    const agencyId = req.params.id;
+
+    // Determiner le niveau de l'utilisateur pour cette agence
+    let userLevel = 999; // Admin par defaut
+    if (user.account_type !== 'admin' && user.account_type !== 'admin_delegated') {
+      const userAccess = user.agency_accesses?.find(a => a.agency_id === agencyId);
+      userLevel = userAccess?.level_number ?? 0;
+    }
+
+    // Filtrer selon le niveau de l'utilisateur
+    const { rows } = await query(
+      `SELECT * FROM problem_types
+       WHERE agency_id = $1
+       AND is_active = true
+       AND min_level_required <= $2
+       ORDER BY name`,
+      [agencyId, userLevel]
+    );
+
+    res.json(rows);
+  } catch (err) {
+    console.error('Erreur liste types de problemes:', err);
+    res.status(500).json({ error: 'Erreur' });
+  }
+});
+
+// POST /api/agencies/:id/problem-types
+router.post('/:id/problem-types', authenticate, requireAdmin, [
+  body('name').trim().notEmpty().withMessage('Nom requis')
+], async (req, res) => {
+  try {
+    const errors = validationResult(req);
+    if (!errors.isEmpty()) {
+      return res.status(400).json({ errors: errors.array() });
+    }
+
+    const { name, description, color, icon, min_level_required } = req.body;
+    const { rows } = await query(`
+      INSERT INTO problem_types (agency_id, name, description, color, icon, min_level_required)
+      VALUES ($1, $2, $3, $4, $5, $6)
+      RETURNING *
+    `, [req.params.id, name, description || null, color || '#6c757d', icon || null, min_level_required || 0]);
+
+    res.status(201).json(rows[0]);
+  } catch (err) {
+    console.error('Erreur creation type:', err);
+    res.status(500).json({ error: 'Erreur creation type de probleme' });
+  }
+});
+
+// PUT /api/agencies/:agencyId/problem-types/:typeId
+router.put('/:agencyId/problem-types/:typeId', authenticate, requireAdmin, async (req, res) => {
+  try {
+    const { typeId } = req.params;
+    const { name, description, color, icon, is_active, min_level_required } = req.body;
+
+    await query(`
+      UPDATE problem_types SET
+        name = COALESCE($1, name),
+        description = COALESCE($2, description),
+        color = COALESCE($3, color),
+        icon = COALESCE($4, icon),
+        is_active = COALESCE($5, is_active),
+        min_level_required = COALESCE($6, min_level_required)
+      WHERE id = $7
+    `, [name, description, color, icon, is_active, min_level_required, typeId]);
+
+    const { rows } = await query('SELECT * FROM problem_types WHERE id = $1', [typeId]);
+    res.json(rows[0]);
+  } catch (err) {
+    console.error('Erreur modification type:', err);
+    res.status(500).json({ error: 'Erreur modification type de probleme' });
   }
 });
 

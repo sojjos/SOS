@@ -77,12 +77,25 @@ router.get('/', authenticate, async (req, res) => {
         params.push(accessibleAgencies);
       }
 
-      // Filtrer selon le niveau hiérarchique
+      // Filtrer selon le niveau hiérarchique et le type de profil
       const userAccess = agency_id
         ? user.agency_accesses?.find(a => a.agency_id === agency_id)
         : user.agency_accesses?.[0];
 
       if (userAccess) {
+        // Filtrer par profile_type (terrain/administratif)
+        // L'utilisateur ne voit que les tickets de sa branche hierarchique
+        const profileTypes = userAccess.profile_types || ['terrain'];
+        if (profileTypes.length === 1) {
+          // Un seul profil: ne voit que les tickets de ce profil
+          baseQuery += ` AND t.profile_type = $${paramIndex++}`;
+          params.push(profileTypes[0]);
+        } else if (profileTypes.length > 1) {
+          // Plusieurs profils: voit les tickets des profils autorises
+          baseQuery += ` AND t.profile_type = ANY($${paramIndex++})`;
+          params.push(profileTypes);
+        }
+
         const permissions = userAccess.permissions || {};
         if (!permissions.can_see_all_site_tickets && !permissions.can_see_team_tickets) {
           // Ne voit que ses propres tickets
@@ -331,13 +344,20 @@ router.post('/', authenticate, [
       }
     }
 
-    // Récupérer le niveau de l'utilisateur
+    // Récupérer le niveau et le profil de l'utilisateur
     let userLevel = 0;
+    let userProfileType = 'terrain'; // Par defaut
     if (user.account_type !== 'admin' && user.account_type !== 'admin_delegated') {
       const userAccess = user.agency_accesses?.find(a => a.agency_id === agency_id);
       userLevel = userAccess?.level_number || 0;
+      // Prendre le premier profile_type de l'utilisateur (ou celui specifie dans la requete)
+      const profileTypes = userAccess?.profile_types || ['terrain'];
+      userProfileType = req.body.profile_type && profileTypes.includes(req.body.profile_type)
+        ? req.body.profile_type
+        : profileTypes[0];
     } else {
       userLevel = 999;
+      userProfileType = req.body.profile_type || 'administratif';
     }
 
     // Vérifier le niveau requis pour le type de problème
@@ -359,7 +379,7 @@ router.post('/', authenticate, [
       }
     }
 
-    // Créer le ticket
+    // Créer le ticket avec le profile_type
     const { rows } = await query(`
       INSERT INTO tickets (
         agency_id, title, description, problem_type_id,
@@ -367,9 +387,9 @@ router.post('/', authenticate, [
         primary_location_id, location_details, impacted_locations,
         proposed_urgency, proposed_blocking,
         impact_description, affected_processes, workaround, has_workaround,
-        created_by, created_at_level, current_level, status
+        created_by, created_at_level, current_level, profile_type, status
       ) VALUES (
-        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $17, 'en_attente_validation'
+        $1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $17, $18, 'en_attente_validation'
       ) RETURNING *
     `, [
       agency_id,
@@ -388,7 +408,8 @@ router.post('/', authenticate, [
       workaround || null,
       has_workaround || false,
       user.id,
-      userLevel
+      userLevel,
+      userProfileType
     ]);
 
     const ticket = rows[0];

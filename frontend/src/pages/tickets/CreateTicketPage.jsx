@@ -8,7 +8,7 @@ import clsx from 'clsx';
 
 function CreateTicketPage() {
   const navigate = useNavigate();
-  const { currentAgency, getCurrentLevel, user } = useAuthStore();
+  const { currentAgency, getCurrentLevel, getProfileTypes, user } = useAuthStore();
 
   const [isLoading, setIsLoading] = useState(false);
   const [problemTypes, setProblemTypes] = useState([]);
@@ -16,6 +16,8 @@ function CreateTicketPage() {
   const [showAdvanced, setShowAdvanced] = useState(false);
 
   const currentLevel = getCurrentLevel();
+  const profileTypes = getProfileTypes();
+  const hasMultipleProfiles = profileTypes.length > 1;
 
   // Formulaire
   const [formData, setFormData] = useState({
@@ -30,7 +32,8 @@ function CreateTicketPage() {
     recurrence_details: '',
     impact_description: '',
     has_workaround: false,
-    workaround: ''
+    workaround: '',
+    profile_type: profileTypes[0] || 'terrain'
   });
 
   // Charger les donnees de configuration
@@ -98,7 +101,8 @@ function CreateTicketPage() {
         recurrence_details: formData.recurrence_details || null,
         impact_description: formData.impact_description || null,
         has_workaround: formData.has_workaround,
-        workaround: formData.has_workaround ? formData.workaround : null
+        workaround: formData.has_workaround ? formData.workaround : null,
+        profile_type: formData.profile_type
       });
 
       toast.success('Ticket cree avec succes');
@@ -157,6 +161,56 @@ function CreateTicketPage() {
           <p className="font-semibold text-primary-600">Niveau {currentLevel}</p>
         </div>
       </div>
+
+      {/* Selecteur de profil si l'utilisateur a les deux */}
+      {hasMultipleProfiles && (
+        <div className="card mb-6">
+          <h2 className="font-semibold text-gray-900 mb-3">Type de ticket</h2>
+          <p className="text-sm text-gray-600 mb-4">
+            Vous avez acces aux deux branches. Selectionnez la branche concernee par ce ticket.
+          </p>
+          <div className="flex gap-4">
+            <label className={clsx(
+              'flex-1 flex items-center gap-3 p-4 rounded-lg border-2 cursor-pointer transition-all',
+              formData.profile_type === 'terrain'
+                ? 'border-green-500 bg-green-50'
+                : 'border-gray-200 hover:border-gray-300'
+            )}>
+              <input
+                type="radio"
+                name="profile_type"
+                value="terrain"
+                checked={formData.profile_type === 'terrain'}
+                onChange={handleChange}
+                className="sr-only"
+              />
+              <div>
+                <p className="font-medium text-gray-900">🏭 Terrain</p>
+                <p className="text-sm text-gray-500">Operations, production, logistique</p>
+              </div>
+            </label>
+            <label className={clsx(
+              'flex-1 flex items-center gap-3 p-4 rounded-lg border-2 cursor-pointer transition-all',
+              formData.profile_type === 'administratif'
+                ? 'border-blue-500 bg-blue-50'
+                : 'border-gray-200 hover:border-gray-300'
+            )}>
+              <input
+                type="radio"
+                name="profile_type"
+                value="administratif"
+                checked={formData.profile_type === 'administratif'}
+                onChange={handleChange}
+                className="sr-only"
+              />
+              <div>
+                <p className="font-medium text-gray-900">🏢 Administratif</p>
+                <p className="text-sm text-gray-500">Bureau, RH, comptabilite</p>
+              </div>
+            </label>
+          </div>
+        </div>
+      )}
 
       {/* Info selon le niveau */}
       {currentLevel === 0 && (

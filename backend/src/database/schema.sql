@@ -189,6 +189,9 @@ CREATE TABLE IF NOT EXISTS tickets (
     current_level INTEGER,
     resolved_at_level INTEGER,
 
+    -- Branche hierarchique (terrain ou administratif)
+    profile_type VARCHAR(20) DEFAULT 'terrain' CHECK (profile_type IN ('terrain', 'administratif')),
+
     -- Visibilité
     is_visible_union BOOLEAN DEFAULT false,
 

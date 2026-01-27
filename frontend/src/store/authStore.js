@@ -120,6 +120,20 @@ const useAuthStore = create(
         return access?.level_number ?? null;
       },
 
+      // Obtenir les types de profil pour l'agence courante (terrain, administratif, ou les deux)
+      getProfileTypes: () => {
+        const { user, currentAgency } = get();
+        if (!user || !currentAgency) return ['terrain'];
+
+        // Admins ont acces a tous les profils
+        if (user.account_type === 'admin' || user.account_type === 'admin_delegated') {
+          return ['terrain', 'administratif'];
+        }
+
+        const access = user.agency_accesses?.find(a => a.agency_id === currentAgency.id);
+        return access?.profile_types || ['terrain'];
+      },
+
       // Vérifier une permission
       hasPermission: (permission) => {
         const { user, currentAgency, adminMode } = get();

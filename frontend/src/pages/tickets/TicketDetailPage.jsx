@@ -270,9 +270,9 @@ function TicketDetailPage() {
       <div className={clsx('px-4 py-2 rounded-lg border', config.bg, config.border)}>
         <p className={clsx('text-sm font-medium', config.text)}>
           {config.label}
-          {ticket.current_level !== undefined && (
+          {ticket.current_level_name && (
             <span className="ml-2 text-xs opacity-75">
-              (Niveau actuel: {ticket.current_level})
+              (En charge: {ticket.current_level_name})
             </span>
           )}
         </p>
@@ -706,6 +706,11 @@ function TicketDetailPage() {
                           <div>
                             <p className="font-medium text-gray-900">
                               {comment.user_name || 'Utilisateur'}
+                              {comment.user_level_name && (
+                                <span className="ml-2 text-xs font-normal text-gray-500">
+                                  ({comment.user_level_name})
+                                </span>
+                              )}
                             </p>
                             <p className="text-xs text-gray-500">
                               {format(new Date(comment.created_at), 'dd MMM yyyy HH:mm', { locale: fr })}
@@ -790,8 +795,8 @@ function TicketDetailPage() {
                     <dt className="text-sm text-gray-500">Cree par</dt>
                     <dd className="font-medium">
                       {ticket.created_by_name || 'Inconnu'}
-                      {ticket.created_at_level !== undefined && (
-                        <span className="text-xs text-gray-500 ml-1">(Niveau {ticket.created_at_level})</span>
+                      {ticket.created_at_level_name && (
+                        <span className="text-xs text-gray-500 block">{ticket.created_at_level_name}</span>
                       )}
                     </dd>
                   </div>
@@ -969,7 +974,12 @@ function TicketDetailPage() {
                         <div className="flex items-start justify-between gap-2">
                           <div>
                             <p className="font-medium text-gray-900">{config.label}</p>
-                            <p className="text-sm text-gray-500">{entry.user_name}</p>
+                            <p className="text-sm text-gray-500">
+                              {entry.user_name}
+                              {entry.user_level_name && (
+                                <span className="text-gray-400"> - {entry.user_level_name}</span>
+                              )}
+                            </p>
                           </div>
                           <span className="text-xs text-gray-400 whitespace-nowrap">
                             {format(new Date(entry.created_at), 'dd MMM yyyy HH:mm', { locale: fr })}

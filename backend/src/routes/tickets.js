@@ -177,7 +177,7 @@ router.get('/:id', authenticate, async (req, res) => {
   try {
     const { id } = req.params;
 
-    // Récupérer le ticket
+    // Récupérer le ticket avec les noms des niveaux hiérarchiques
     const { rows } = await query(`
       SELECT t.*,
              a.name as agency_name,
@@ -186,7 +186,9 @@ router.get('/:id', authenticate, async (req, res) => {
              uc.first_name || ' ' || uc.last_name as created_by_name, uc.email as created_by_email,
              ur.first_name || ' ' || ur.last_name as responsible_name,
              uv.first_name || ' ' || uv.last_name as validated_by_name,
-             ures.first_name || ' ' || ures.last_name as resolved_by_name
+             ures.first_name || ' ' || ures.last_name as resolved_by_name,
+             hl_created.name as created_at_level_name,
+             hl_current.name as current_level_name
       FROM tickets t
       LEFT JOIN agencies a ON t.agency_id = a.id
       LEFT JOIN problem_types pt ON t.problem_type_id = pt.id
@@ -195,6 +197,8 @@ router.get('/:id', authenticate, async (req, res) => {
       LEFT JOIN users ur ON t.current_responsible = ur.id
       LEFT JOIN users uv ON t.validated_by = uv.id
       LEFT JOIN users ures ON t.resolved_by = ures.id
+      LEFT JOIN hierarchy_levels hl_created ON hl_created.agency_id = t.agency_id AND hl_created.level_number = t.created_at_level
+      LEFT JOIN hierarchy_levels hl_current ON hl_current.agency_id = t.agency_id AND hl_current.level_number = t.current_level
       WHERE t.id = $1
     `, [id]);
 
@@ -213,14 +217,18 @@ router.get('/:id', authenticate, async (req, res) => {
       }
     }
 
-    // Récupérer les commentaires (filtrer selon les permissions)
+    // Récupérer les commentaires avec le titre du poste de l'auteur
     let commentsQuery = `
       SELECT c.*,
              u.first_name || ' ' || u.last_name as user_name,
-             cg.name as confidentiality_group_name
+             cg.name as confidentiality_group_name,
+             hl.name as user_level_name,
+             uaa.level_number as user_level_number
       FROM comments c
       LEFT JOIN users u ON c.user_id = u.id
       LEFT JOIN confidentiality_groups cg ON c.confidentiality_group_id = cg.id
+      LEFT JOIN user_agency_access uaa ON uaa.user_id = c.user_id AND uaa.agency_id = $2
+      LEFT JOIN hierarchy_levels hl ON hl.agency_id = $2 AND hl.level_number = uaa.level_number
       WHERE c.ticket_id = $1
     `;
 
@@ -235,26 +243,29 @@ router.get('/:id', authenticate, async (req, res) => {
              OR EXISTS (
                SELECT 1 FROM confidentiality_groups cg2
                WHERE cg2.id = c.confidentiality_group_id
-               AND $2 = ANY(ARRAY(SELECT jsonb_array_elements_text(cg2.can_read_levels)::int))
+               AND $3 = ANY(ARRAY(SELECT jsonb_array_elements_text(cg2.can_read_levels)::int))
              ))
       `;
-      const { rows: comments } = await query(commentsQuery + ' ORDER BY c.created_at ASC', [id, userLevel]);
+      const { rows: comments } = await query(commentsQuery + ' ORDER BY c.created_at ASC', [id, ticket.agency_id, userLevel]);
       ticket.comments = comments;
     } else {
-      const { rows: comments } = await query(commentsQuery + ' ORDER BY c.created_at ASC', [id]);
+      const { rows: comments } = await query(commentsQuery + ' ORDER BY c.created_at ASC', [id, ticket.agency_id]);
       ticket.comments = comments;
     }
 
-    // Récupérer l'historique
+    // Récupérer l'historique avec le titre du poste
     const { rows: history } = await query(`
       SELECT th.*,
-             u.first_name || ' ' || u.last_name as user_name
+             u.first_name || ' ' || u.last_name as user_name,
+             hl.name as user_level_name
       FROM ticket_history th
       LEFT JOIN users u ON th.user_id = u.id
+      LEFT JOIN user_agency_access uaa ON uaa.user_id = th.user_id AND uaa.agency_id = $2
+      LEFT JOIN hierarchy_levels hl ON hl.agency_id = $2 AND hl.level_number = uaa.level_number
       WHERE th.ticket_id = $1
       ORDER BY th.created_at DESC
       LIMIT 50
-    `, [id]);
+    `, [id, ticket.agency_id]);
     ticket.history = history;
 
     // Récupérer les escalades

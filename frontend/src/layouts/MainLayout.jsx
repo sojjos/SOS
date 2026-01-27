@@ -11,7 +11,9 @@ import {
   X,
   Building2,
   ChevronDown,
-  Shield
+  Shield,
+  Globe,
+  Users
 } from 'lucide-react';
 import useAuthStore from '../store/authStore';
 import useNotificationStore from '../store/notificationStore';
@@ -25,7 +27,7 @@ function MainLayout() {
   const [agencyMenuOpen, setAgencyMenuOpen] = useState(false);
   const [agencies, setAgencies] = useState([]);
 
-  const { user, currentAgency, setCurrentAgency, logout, isAdmin, adminMode, toggleAdminMode } = useAuthStore();
+  const { user, currentAgency, setCurrentAgency, logout, isAdmin, isUnionMember, adminMode, toggleAdminMode } = useAuthStore();
   const { unreadCount, fetchUnreadCount } = useNotificationStore();
 
   // Charger les agences disponibles
@@ -64,6 +66,8 @@ function MainLayout() {
     { path: '/tickets', icon: Ticket, label: 'Tickets' },
     { path: '/notifications', icon: Bell, label: 'Notifications', badge: unreadCount },
     { path: '/profile', icon: User, label: 'Profil' },
+    // Afficher le lien syndicat uniquement pour les membres du syndicat
+    ...(isUnionMember() ? [{ path: '/union', icon: Users, label: 'Vue Syndicat' }] : []),
   ];
 
   const adminItems = [
@@ -71,6 +75,7 @@ function MainLayout() {
     { path: '/admin/agencies', icon: Building2, label: 'Agences' },
     { path: '/admin/users', icon: User, label: 'Utilisateurs' },
     { path: '/admin/logs', icon: Settings, label: 'Logs' },
+    { path: '/admin/multi-sites', icon: Globe, label: 'Multi-Sites' },
   ];
 
   return (

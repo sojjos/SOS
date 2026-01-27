@@ -433,82 +433,130 @@ router.get('/multi-sites', authenticate, async (req, res) => {
       return res.status(403).json({ error: 'Accès non autorisé' });
     }
 
-    const { period = '30', agency_ids } = req.query;
-    const periodDays = parseInt(period);
+    // Parse period parameter (format: "7days", "30days", "90days", "365days")
+    const { period = '30days' } = req.query;
+    const periodMatch = period.match(/(\d+)/);
+    const periodDays = periodMatch ? parseInt(periodMatch[1]) : 30;
+
     const startDate = new Date();
     startDate.setDate(startDate.getDate() - periodDays);
 
-    let agencyFilter = '';
-    const params = [startDate];
+    // Période précédente pour comparaison
+    const previousStartDate = new Date(startDate);
+    previousStartDate.setDate(previousStartDate.getDate() - periodDays);
 
-    if (agency_ids) {
-      const ids = agency_ids.split(',');
-      agencyFilter = `AND t.agency_id = ANY($2)`;
-      params.push(ids);
-    }
-
-    // Comparatif par site
-    const { rows: siteComparison } = await query(`
+    // Statistiques par agence
+    const { rows: agencies } = await query(`
       SELECT
-        a.id as agency_id,
-        a.name as agency_name,
-        a.code as agency_code,
+        a.id,
+        a.name,
+        a.code,
         COUNT(t.id) as total_tickets,
-        COUNT(CASE WHEN t.status IN ('resolu', 'cloture') THEN 1 END) as resolved,
-        ROUND(AVG(EXTRACT(EPOCH FROM (t.resolved_at - t.created_at)) / 86400)::numeric, 1) as avg_days,
+        COUNT(CASE WHEN t.status NOT IN ('resolu', 'cloture') THEN 1 END) as active_tickets,
+        COUNT(CASE WHEN t.validated_urgency = 'critique' AND t.status NOT IN ('resolu', 'cloture') THEN 1 END) as critical_active,
+        COUNT(CASE WHEN t.status IN ('resolu', 'cloture') AND t.resolved_at >= $1 THEN 1 END) as resolved_this_month,
+        ROUND(AVG(CASE WHEN t.resolved_at IS NOT NULL
+          THEN EXTRACT(EPOCH FROM (t.resolved_at - t.created_at)) / 86400 END)::numeric, 1) as avg_resolution_days,
         ROUND(
-          COUNT(CASE WHEN t.resolved_at <= t.sla_resolution_deadline THEN 1 END)::numeric /
+          COUNT(CASE WHEN t.resolved_at IS NOT NULL AND t.resolved_at <= t.sla_resolution_deadline THEN 1 END)::numeric /
           NULLIF(COUNT(CASE WHEN t.resolved_at IS NOT NULL THEN 1 END), 0) * 100
-        , 1) as sla_percent,
-        ROUND(
-          (SELECT COUNT(*) FROM ticket_escalations te2
-           JOIN tickets t2 ON te2.ticket_id = t2.id
-           WHERE t2.agency_id = a.id AND te2.created_at >= $1)::numeric /
-          NULLIF(COUNT(t.id), 0) * 100
-        , 1) as escalation_rate
+        , 1) as sla_compliance
       FROM agencies a
-      LEFT JOIN tickets t ON a.id = t.agency_id AND t.created_at >= $1
+      LEFT JOIN tickets t ON a.id = t.agency_id
       WHERE a.is_active = true
-      ${agencyFilter.replace('t.agency_id', 'a.id')}
       GROUP BY a.id, a.name, a.code
-      ORDER BY total_tickets DESC
-    `, params);
+      ORDER BY a.name
+    `, [startDate]);
 
-    // Problèmes communs à plusieurs sites
-    const { rows: commonProblems } = await query(`
+    // Statistiques globales
+    const { rows: globalRows } = await query(`
       SELECT
-        pt.name as problem_type,
-        array_agg(DISTINCT a.name) as agencies,
-        COUNT(*) as total
+        COUNT(*) as total_tickets,
+        COUNT(CASE WHEN status NOT IN ('resolu', 'cloture') THEN 1 END) as active_tickets,
+        COUNT(CASE WHEN status IN ('resolu', 'cloture') AND resolved_at >= $1 THEN 1 END) as resolved_period,
+        COUNT(CASE WHEN validated_urgency = 'critique' AND status NOT IN ('resolu', 'cloture') THEN 1 END) as critical_active
+      FROM tickets
+    `, [startDate]);
+
+    // Stats période précédente pour comparaison
+    const { rows: previousRows } = await query(`
+      SELECT
+        COUNT(*) as previous_total,
+        COUNT(CASE WHEN status IN ('resolu', 'cloture') AND resolved_at >= $1 AND resolved_at < $2 THEN 1 END) as previous_resolved
+      FROM tickets
+    `, [previousStartDate, startDate]);
+
+    const global_stats = {
+      ...globalRows[0],
+      previous_total: previousRows[0]?.previous_total || 0,
+      previous_resolved: previousRows[0]?.previous_resolved || 0
+    };
+
+    // Tendances par semaine
+    const { rows: trendsRaw } = await query(`
+      SELECT
+        TO_CHAR(DATE_TRUNC('week', t.created_at), 'DD/MM') as period,
+        t.agency_id,
+        COUNT(*) as count
       FROM tickets t
-      JOIN problem_types pt ON t.problem_type_id = pt.id
-      JOIN agencies a ON t.agency_id = a.id
       WHERE t.created_at >= $1
-      ${agencyFilter}
-      GROUP BY pt.name
-      HAVING COUNT(DISTINCT t.agency_id) > 1
-      ORDER BY total DESC
-      LIMIT 10
-    `, params);
+      GROUP BY DATE_TRUNC('week', t.created_at), t.agency_id
+      ORDER BY DATE_TRUNC('week', t.created_at)
+    `, [startDate]);
 
-    // Évolution comparative
-    const { rows: trendComparison } = await query(`
-      SELECT
-        a.name as agency_name,
-        DATE_TRUNC('week', t.resolved_at) as week,
-        ROUND(AVG(EXTRACT(EPOCH FROM (t.resolved_at - t.created_at)) / 86400)::numeric, 1) as avg_days
+    // Transformer les tendances
+    const trendsMap = {};
+    trendsRaw.forEach(row => {
+      if (!trendsMap[row.period]) {
+        trendsMap[row.period] = { period: row.period, by_agency: {} };
+      }
+      trendsMap[row.period].by_agency[row.agency_id] = parseInt(row.count);
+    });
+    const trends = Object.values(trendsMap);
+
+    // Alertes
+    const alerts = [];
+
+    // Vérifier SLA dépassés
+    const { rows: slaAlerts } = await query(`
+      SELECT COUNT(*) as count, a.name as agency_name
       FROM tickets t
       JOIN agencies a ON t.agency_id = a.id
-      WHERE t.resolved_at >= $1
-      ${agencyFilter}
-      GROUP BY a.name, DATE_TRUNC('week', t.resolved_at)
-      ORDER BY week, a.name
-    `, params);
+      WHERE t.sla_resolution_deadline < NOW()
+      AND t.status NOT IN ('resolu', 'cloture')
+      GROUP BY a.name
+      HAVING COUNT(*) > 3
+    `);
+    slaAlerts.forEach(alert => {
+      alerts.push({
+        type: 'sla',
+        message: `${alert.agency_name}: ${alert.count} tickets ont dépassé leur SLA`
+      });
+    });
+
+    // Vérifier tickets critiques anciens
+    const { rows: criticalAlerts } = await query(`
+      SELECT COUNT(*) as count, a.name as agency_name
+      FROM tickets t
+      JOIN agencies a ON t.agency_id = a.id
+      WHERE t.validated_urgency = 'critique'
+      AND t.status NOT IN ('resolu', 'cloture')
+      AND t.created_at < NOW() - INTERVAL '7 days'
+      GROUP BY a.name
+      HAVING COUNT(*) > 0
+    `);
+    criticalAlerts.forEach(alert => {
+      alerts.push({
+        type: 'critical',
+        message: `${alert.agency_name}: ${alert.count} ticket(s) critique(s) non résolu(s) depuis plus de 7 jours`
+      });
+    });
 
     res.json({
-      siteComparison,
-      commonProblems,
-      trendComparison
+      agencies,
+      global_stats,
+      trends,
+      alerts
     });
   } catch (err) {
     console.error('Erreur dashboard multi-sites:', err);

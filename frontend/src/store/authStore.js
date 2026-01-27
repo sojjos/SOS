@@ -98,6 +98,13 @@ const useAuthStore = create(
         return user?.account_type === 'admin';
       },
 
+      // Vérifier si l'utilisateur est membre du syndicat
+      isUnionMember: () => {
+        const { user } = get();
+        if (!user) return false;
+        return user.agency_accesses?.some(a => a.is_union_member === true) || false;
+      },
+
       // Obtenir le niveau hiérarchique pour l'agence courante
       getCurrentLevel: () => {
         const { user, currentAgency, adminMode } = get();

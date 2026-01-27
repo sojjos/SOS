@@ -6,6 +6,21 @@ const { authenticate, requireAdmin, requireAgencyAccess } = require('../middlewa
 const router = express.Router();
 
 // ====================================
+// GET /api/agencies/public - Liste publique des agences (pour demande de compte)
+// ====================================
+router.get('/public', async (req, res) => {
+  try {
+    const { rows } = await query(
+      'SELECT id, name, city FROM agencies WHERE is_active = true ORDER BY name'
+    );
+    res.json(rows);
+  } catch (err) {
+    console.error('Erreur liste agences publique:', err);
+    res.status(500).json({ error: 'Erreur lors de la récupération des agences' });
+  }
+});
+
+// ====================================
 // GET /api/agencies - Liste des agences
 // ====================================
 router.get('/', authenticate, async (req, res) => {

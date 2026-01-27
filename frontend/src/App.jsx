@@ -10,6 +10,7 @@ import AuthLayout from './layouts/AuthLayout';
 import LoginPage from './pages/auth/LoginPage';
 import ForgotPasswordPage from './pages/auth/ForgotPasswordPage';
 import ResetPasswordPage from './pages/auth/ResetPasswordPage';
+import RequestAccountPage from './pages/auth/RequestAccountPage';
 
 // Pages principales
 import DashboardPage from './pages/DashboardPage';
@@ -25,6 +26,10 @@ import AdminAgencies from './pages/admin/AdminAgencies';
 import AdminUsers from './pages/admin/AdminUsers';
 import AdminLogs from './pages/admin/AdminLogs';
 import AgencyConfig from './pages/admin/AgencyConfig';
+import MultiSitesDashboard from './pages/admin/MultiSitesDashboard';
+
+// Pages Syndicat
+import UnionDashboard from './pages/union/UnionDashboard';
 
 // Composant de route protégée
 function ProtectedRoute({ children, adminOnly = false }) {
@@ -50,7 +55,7 @@ function ProtectedRoute({ children, adminOnly = false }) {
 }
 
 // Composant de route publique (redirect si déjà connecté)
-function PublicRoute({ children }) {
+function PublicRoute({ children, allowAuthenticated = false }) {
   const { isAuthenticated, isLoading } = useAuthStore();
 
   if (isLoading) {
@@ -61,7 +66,31 @@ function PublicRoute({ children }) {
     );
   }
 
-  if (isAuthenticated) {
+  if (isAuthenticated && !allowAuthenticated) {
+    return <Navigate to="/" replace />;
+  }
+
+  return children;
+}
+
+// Composant de route syndicat (vérifie si l'utilisateur est membre du syndicat)
+function UnionRoute({ children }) {
+  const { isAuthenticated, isLoading, isUnionMember, isAdmin } = useAuthStore();
+
+  if (isLoading) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
+      </div>
+    );
+  }
+
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
+
+  // Les admins peuvent aussi accéder à la vue syndicat
+  if (!isUnionMember() && !isAdmin()) {
     return <Navigate to="/" replace />;
   }
 
@@ -100,6 +129,14 @@ function App() {
           element={
             <PublicRoute>
               <ResetPasswordPage />
+            </PublicRoute>
+          }
+        />
+        <Route
+          path="/request-account"
+          element={
+            <PublicRoute>
+              <RequestAccountPage />
             </PublicRoute>
           }
         />
@@ -166,6 +203,24 @@ function App() {
             <ProtectedRoute adminOnly>
               <AdminLogs />
             </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/admin/multi-sites"
+          element={
+            <ProtectedRoute adminOnly>
+              <MultiSitesDashboard />
+            </ProtectedRoute>
+          }
+        />
+
+        {/* Routes Syndicat */}
+        <Route
+          path="/union"
+          element={
+            <UnionRoute>
+              <UnionDashboard />
+            </UnionRoute>
           }
         />
       </Route>

@@ -107,6 +107,15 @@ function LoginPage() {
             </>
           )}
         </button>
+
+        <div className="text-center mt-4 pt-4 border-t">
+          <p className="text-sm text-gray-600">
+            Pas encore de compte ?{' '}
+            <Link to="/request-account" className="text-primary-600 hover:text-primary-700 font-medium">
+              Demander un accès
+            </Link>
+          </p>
+        </div>
       </form>
     </div>
   );

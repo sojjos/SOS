@@ -1,5 +1,5 @@
 -- ====================================
--- SOS - Schéma de Base de Données
+-- SOS - Schéma de Base de Données Unifié
 -- Version: 1.0.0
 -- ====================================
 
@@ -48,8 +48,15 @@ CREATE TABLE IF NOT EXISTS users (
     last_name VARCHAR(100) NOT NULL,
     phone VARCHAR(20),
     account_type VARCHAR(20) NOT NULL CHECK (account_type IN ('admin', 'admin_delegated', 'user')),
+    account_status VARCHAR(20) DEFAULT 'active' CHECK (account_status IN ('pending', 'active', 'suspended', 'rejected')),
     is_active BOOLEAN DEFAULT true,
     is_email_verified BOOLEAN DEFAULT false,
+    must_change_password BOOLEAN DEFAULT false,
+    notification_preferences JSONB DEFAULT '{}',
+    verification_token VARCHAR(255),
+    verification_token_expires TIMESTAMP WITH TIME ZONE,
+    password_reset_token VARCHAR(255),
+    password_reset_expires TIMESTAMP WITH TIME ZONE,
     last_login TIMESTAMP WITH TIME ZONE,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
@@ -65,6 +72,9 @@ CREATE TABLE IF NOT EXISTS user_agency_access (
     profile_types JSONB DEFAULT '["terrain"]',
     is_union_member BOOLEAN DEFAULT false,
     is_inter_site BOOLEAN DEFAULT false,
+    union_view_only BOOLEAN DEFAULT false,
+    can_see_confidential BOOLEAN DEFAULT false,
+    allowed_locations UUID[] DEFAULT '{}',
     is_active BOOLEAN DEFAULT true,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
@@ -86,6 +96,8 @@ CREATE TABLE IF NOT EXISTS access_requests (
     rejection_reason TEXT,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+
+CREATE INDEX idx_access_requests_status ON access_requests(status);
 
 -- Table des lieux (par agence)
 CREATE TABLE IF NOT EXISTS locations (
@@ -195,6 +207,8 @@ CREATE INDEX idx_tickets_created_by ON tickets(created_by);
 CREATE INDEX idx_tickets_responsible ON tickets(current_responsible);
 CREATE INDEX idx_tickets_created_at ON tickets(created_at);
 CREATE INDEX idx_tickets_urgency ON tickets(validated_urgency);
+CREATE INDEX idx_tickets_visible_union ON tickets(agency_id) WHERE is_visible_union = true;
+CREATE INDEX idx_tickets_status_agency ON tickets(agency_id, status);
 
 -- Table des escalades
 CREATE TABLE IF NOT EXISTS ticket_escalations (
@@ -235,6 +249,37 @@ CREATE TABLE IF NOT EXISTS comments (
 );
 
 CREATE INDEX idx_comments_ticket ON comments(ticket_id);
+
+-- Table des pièces jointes
+CREATE TABLE IF NOT EXISTS attachments (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    ticket_id UUID REFERENCES tickets(id) ON DELETE CASCADE,
+    comment_id UUID REFERENCES comments(id) ON DELETE CASCADE,
+
+    -- Informations fichier
+    original_name VARCHAR(255) NOT NULL,
+    stored_name VARCHAR(255) NOT NULL,
+    mime_type VARCHAR(100) NOT NULL,
+    file_size INTEGER NOT NULL,
+    file_path TEXT NOT NULL,
+
+    -- Métadonnées
+    uploaded_by UUID NOT NULL REFERENCES users(id),
+    is_image BOOLEAN DEFAULT false,
+    thumbnail_path TEXT,
+
+    -- Sécurité
+    is_scanned BOOLEAN DEFAULT false,
+    scan_result VARCHAR(20) CHECK (scan_result IN ('clean', 'infected', 'error')),
+
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+
+    -- Au moins un des deux doit être renseigné
+    CONSTRAINT attachment_parent CHECK (ticket_id IS NOT NULL OR comment_id IS NOT NULL)
+);
+
+CREATE INDEX idx_attachments_ticket ON attachments(ticket_id);
+CREATE INDEX idx_attachments_comment ON attachments(comment_id);
 
 -- Table historique des tickets (audit trail)
 CREATE TABLE IF NOT EXISTS ticket_history (
@@ -279,6 +324,20 @@ CREATE TABLE IF NOT EXISTS user_notification_preferences (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(user_id, notification_type)
 );
+
+-- Table des tokens de vérification email
+CREATE TABLE IF NOT EXISTS email_verification_tokens (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    token VARCHAR(255) NOT NULL UNIQUE,
+    token_type VARCHAR(20) NOT NULL CHECK (token_type IN ('email_verification', 'password_reset')),
+    expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+    used_at TIMESTAMP WITH TIME ZONE,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_verification_tokens_user ON email_verification_tokens(user_id);
+CREATE INDEX idx_verification_tokens_token ON email_verification_tokens(token);
 
 -- Table des logs administrateur
 CREATE TABLE IF NOT EXISTS admin_logs (
@@ -349,9 +408,95 @@ CREATE TABLE IF NOT EXISTS dynamic_questions (
     options JSONB,
     is_required BOOLEAN DEFAULT false,
     display_order INTEGER DEFAULT 0,
+    urgency_trigger VARCHAR(20)[] DEFAULT '{}',
+    blocking_trigger VARCHAR(20)[] DEFAULT '{}',
+    help_text TEXT,
+    validation_rules JSONB DEFAULT '{}',
     is_active BOOLEAN DEFAULT true,
     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
 );
+
+-- Table des réponses aux questions dynamiques
+CREATE TABLE IF NOT EXISTS dynamic_question_responses (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    ticket_id UUID NOT NULL REFERENCES tickets(id) ON DELETE CASCADE,
+    question_id UUID NOT NULL REFERENCES dynamic_questions(id) ON DELETE CASCADE,
+    response_value JSONB NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    UNIQUE(ticket_id, question_id)
+);
+
+CREATE INDEX idx_question_responses_ticket ON dynamic_question_responses(ticket_id);
+
+-- Table des exports
+CREATE TABLE IF NOT EXISTS export_requests (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    user_id UUID NOT NULL REFERENCES users(id),
+    agency_id UUID REFERENCES agencies(id),
+
+    -- Configuration export
+    export_type VARCHAR(20) NOT NULL CHECK (export_type IN ('tickets', 'stats', 'users', 'audit')),
+    format VARCHAR(10) NOT NULL CHECK (format IN ('pdf', 'excel', 'csv')),
+    filters JSONB DEFAULT '{}',
+
+    -- Statut
+    status VARCHAR(20) DEFAULT 'pending' CHECK (status IN ('pending', 'processing', 'completed', 'failed', 'expired')),
+    file_path TEXT,
+    file_size INTEGER,
+    error_message TEXT,
+
+    -- Dates
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    completed_at TIMESTAMP WITH TIME ZONE,
+    expires_at TIMESTAMP WITH TIME ZONE
+);
+
+CREATE INDEX idx_exports_user ON export_requests(user_id);
+CREATE INDEX idx_exports_status ON export_requests(status);
+
+-- Table des permissions d'export
+CREATE TABLE IF NOT EXISTS export_permissions (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    agency_id UUID REFERENCES agencies(id) ON DELETE CASCADE,
+    hierarchy_level_id UUID REFERENCES hierarchy_levels(id) ON DELETE CASCADE,
+
+    can_export_tickets BOOLEAN DEFAULT false,
+    can_export_stats BOOLEAN DEFAULT false,
+    can_export_users BOOLEAN DEFAULT false,
+    can_export_audit BOOLEAN DEFAULT false,
+
+    max_records INTEGER DEFAULT 1000,
+    allowed_formats VARCHAR(10)[] DEFAULT ARRAY['pdf', 'excel'],
+
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Table des statistiques syndicat (cache)
+CREATE TABLE IF NOT EXISTS union_stats_cache (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    agency_id UUID NOT NULL REFERENCES agencies(id) ON DELETE CASCADE,
+
+    -- Statistiques agrégées (sans données personnelles)
+    period_start DATE NOT NULL,
+    period_end DATE NOT NULL,
+
+    total_tickets INTEGER DEFAULT 0,
+    resolved_tickets INTEGER DEFAULT 0,
+    avg_resolution_days NUMERIC(10,2),
+    tickets_by_type JSONB DEFAULT '{}',
+    tickets_by_location JSONB DEFAULT '{}',
+    tickets_by_urgency JSONB DEFAULT '{}',
+    sla_compliance_rate NUMERIC(5,2),
+
+    generated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+
+    UNIQUE(agency_id, period_start, period_end)
+);
+
+-- Index utilisateurs
+CREATE INDEX idx_users_account_status ON users(account_status);
 
 -- ====================================
 -- VUES UTILES
@@ -402,6 +547,70 @@ FROM agencies a
 LEFT JOIN tickets t ON a.id = t.agency_id
 GROUP BY a.id, a.name;
 
+-- Vue pour les tickets visibles au syndicat
+CREATE OR REPLACE VIEW v_union_visible_tickets AS
+SELECT
+    t.id,
+    t.ticket_number,
+    t.agency_id,
+    a.name AS agency_name,
+    t.title,
+    -- Pas de description détaillée pour le syndicat
+    pt.name AS problem_type_name,
+    l.name AS location_name,
+    t.validated_urgency,
+    t.validated_blocking,
+    t.status,
+    t.created_at,
+    t.resolved_at,
+    t.closed_at,
+    -- Pas de noms de personnes
+    CASE
+        WHEN t.sla_resolution_deadline IS NOT NULL AND t.resolved_at IS NOT NULL
+        THEN t.resolved_at <= t.sla_resolution_deadline
+        ELSE NULL
+    END AS sla_respected
+FROM tickets t
+JOIN agencies a ON t.agency_id = a.id
+LEFT JOIN problem_types pt ON t.problem_type_id = pt.id
+LEFT JOIN locations l ON t.primary_location_id = l.id
+WHERE t.is_visible_union = true
+AND t.status NOT IN ('nouveau', 'en_attente_validation');
+
+-- Vue statistiques syndicat par agence
+CREATE OR REPLACE VIEW v_union_agency_stats AS
+SELECT
+    a.id AS agency_id,
+    a.name AS agency_name,
+    COUNT(t.id) AS total_visible_tickets,
+    COUNT(CASE WHEN t.status IN ('resolu', 'cloture') THEN 1 END) AS resolved_tickets,
+    COUNT(CASE WHEN t.validated_urgency = 'critique' THEN 1 END) AS critical_tickets,
+    COUNT(CASE WHEN t.validated_urgency = 'haute' THEN 1 END) AS high_tickets,
+    ROUND(AVG(CASE WHEN t.resolved_at IS NOT NULL
+        THEN EXTRACT(EPOCH FROM (t.resolved_at - t.created_at)) / 86400
+        END)::numeric, 2) AS avg_resolution_days,
+    ROUND((COUNT(CASE WHEN t.resolved_at <= t.sla_resolution_deadline THEN 1 END)::numeric /
+        NULLIF(COUNT(CASE WHEN t.resolved_at IS NOT NULL THEN 1 END), 0) * 100)::numeric, 1) AS sla_compliance_percent,
+    -- Répartition par type (top 5)
+    (SELECT jsonb_agg(row_to_json(sub)) FROM (
+        SELECT pt2.name, COUNT(*) as count
+        FROM tickets t2
+        JOIN problem_types pt2 ON t2.problem_type_id = pt2.id
+        WHERE t2.agency_id = a.id AND t2.is_visible_union = true
+        GROUP BY pt2.name ORDER BY count DESC LIMIT 5
+    ) sub) AS top_problem_types,
+    -- Répartition par lieu (top 5)
+    (SELECT jsonb_agg(row_to_json(sub)) FROM (
+        SELECT l2.name, COUNT(*) as count
+        FROM tickets t2
+        JOIN locations l2 ON t2.primary_location_id = l2.id
+        WHERE t2.agency_id = a.id AND t2.is_visible_union = true
+        GROUP BY l2.name ORDER BY count DESC LIMIT 5
+    ) sub) AS top_locations
+FROM agencies a
+LEFT JOIN tickets t ON a.id = t.agency_id AND t.is_visible_union = true
+GROUP BY a.id, a.name;
+
 -- ====================================
 -- FONCTIONS
 -- ====================================
@@ -415,21 +624,31 @@ BEGIN
 END;
 $$ language 'plpgsql';
 
--- Triggers pour updated_at
-CREATE TRIGGER update_agencies_updated_at BEFORE UPDATE ON agencies
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+-- Fonction pour générer le numéro de ticket
+CREATE OR REPLACE FUNCTION generate_ticket_reference()
+RETURNS TRIGGER AS $$
+DECLARE
+    agency_code VARCHAR(20);
+    year_suffix VARCHAR(2);
+    next_num INTEGER;
+BEGIN
+    -- Récupérer le code agence
+    SELECT code INTO agency_code FROM agencies WHERE id = NEW.agency_id;
 
-CREATE TRIGGER update_users_updated_at BEFORE UPDATE ON users
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+    -- Année sur 2 chiffres
+    year_suffix := to_char(CURRENT_DATE, 'YY');
 
-CREATE TRIGGER update_tickets_updated_at BEFORE UPDATE ON tickets
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+    -- Prochain numéro pour cette agence cette année
+    SELECT COALESCE(MAX(ticket_number), 0) + 1 INTO next_num
+    FROM tickets
+    WHERE agency_id = NEW.agency_id
+    AND EXTRACT(YEAR FROM created_at) = EXTRACT(YEAR FROM CURRENT_DATE);
 
-CREATE TRIGGER update_hierarchy_levels_updated_at BEFORE UPDATE ON hierarchy_levels
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+    NEW.ticket_number := next_num;
 
-CREATE TRIGGER update_locations_updated_at BEFORE UPDATE ON locations
-    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
 
 -- Fonction pour calculer les deadlines SLA
 CREATE OR REPLACE FUNCTION calculate_sla_deadlines()
@@ -454,9 +673,86 @@ BEGIN
 END;
 $$ language 'plpgsql';
 
+-- Fonction pour logger l'historique des tickets
+CREATE OR REPLACE FUNCTION log_ticket_changes()
+RETURNS TRIGGER AS $$
+BEGIN
+    -- Changement de statut
+    IF OLD.status IS DISTINCT FROM NEW.status THEN
+        INSERT INTO ticket_history (ticket_id, user_id, action, field_name, old_value, new_value)
+        VALUES (NEW.id, COALESCE(NEW.current_responsible, NEW.created_by), 'status_change', 'status', OLD.status, NEW.status);
+    END IF;
+
+    -- Changement d'urgence
+    IF OLD.validated_urgency IS DISTINCT FROM NEW.validated_urgency THEN
+        INSERT INTO ticket_history (ticket_id, user_id, action, field_name, old_value, new_value)
+        VALUES (NEW.id, COALESCE(NEW.validated_by, NEW.created_by), 'urgency_change', 'validated_urgency', OLD.validated_urgency, NEW.validated_urgency);
+    END IF;
+
+    -- Changement de responsable
+    IF OLD.current_responsible IS DISTINCT FROM NEW.current_responsible THEN
+        INSERT INTO ticket_history (ticket_id, user_id, action, field_name, old_value, new_value)
+        VALUES (NEW.id, COALESCE(NEW.current_responsible, NEW.created_by), 'assignment_change', 'current_responsible', OLD.current_responsible::TEXT, NEW.current_responsible::TEXT);
+    END IF;
+
+    -- Escalade
+    IF OLD.current_level IS DISTINCT FROM NEW.current_level THEN
+        INSERT INTO ticket_history (ticket_id, user_id, action, field_name, old_value, new_value)
+        VALUES (NEW.id, COALESCE(NEW.current_responsible, NEW.created_by), 'escalation', 'current_level', OLD.current_level::TEXT, NEW.current_level::TEXT);
+    END IF;
+
+    -- Changement de visibilité syndicat
+    IF OLD.is_visible_union IS DISTINCT FROM NEW.is_visible_union THEN
+        INSERT INTO ticket_history (ticket_id, user_id, action, field_name, old_value, new_value)
+        VALUES (NEW.id, COALESCE(NEW.current_responsible, NEW.created_by), 'visibility_change', 'is_visible_union', OLD.is_visible_union::TEXT, NEW.is_visible_union::TEXT);
+    END IF;
+
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- ====================================
+-- TRIGGERS
+-- ====================================
+
+-- Triggers pour updated_at
+CREATE TRIGGER update_agencies_updated_at BEFORE UPDATE ON agencies
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_users_updated_at BEFORE UPDATE ON users
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_tickets_updated_at BEFORE UPDATE ON tickets
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_hierarchy_levels_updated_at BEFORE UPDATE ON hierarchy_levels
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_locations_updated_at BEFORE UPDATE ON locations
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_export_permissions_updated_at BEFORE UPDATE ON export_permissions
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+CREATE TRIGGER update_dynamic_question_responses_updated_at BEFORE UPDATE ON dynamic_question_responses
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- Trigger pour générer le numéro de ticket
+CREATE TRIGGER generate_ticket_number
+    BEFORE INSERT ON tickets
+    FOR EACH ROW
+    EXECUTE FUNCTION generate_ticket_reference();
+
+-- Trigger pour calculer les SLA
 CREATE TRIGGER calculate_ticket_sla BEFORE UPDATE ON tickets
     FOR EACH ROW EXECUTE FUNCTION calculate_sla_deadlines();
 
+-- Trigger pour l'historique des tickets
+CREATE TRIGGER log_ticket_history
+    AFTER UPDATE ON tickets
+    FOR EACH ROW
+    EXECUTE FUNCTION log_ticket_changes();
+
 -- ====================================
--- FIN DU SCHÉMA
+-- FIN DU SCHÉMA UNIFIÉ
 -- ====================================

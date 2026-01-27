@@ -2,9 +2,12 @@ const express = require('express');
 const cors = require('cors');
 const helmet = require('helmet');
 const rateLimit = require('express-rate-limit');
+const http = require('http');
+const path = require('path');
 require('dotenv').config();
 
 const { pool } = require('./config/database');
+const { initWebSocket, getActiveConnections } = require('./services/websocket');
 
 // Import des routes
 const authRoutes = require('./routes/auth');
@@ -14,6 +17,11 @@ const ticketsRoutes = require('./routes/tickets');
 const dashboardRoutes = require('./routes/dashboard');
 const notificationsRoutes = require('./routes/notifications');
 const adminRoutes = require('./routes/admin');
+const uploadsRoutes = require('./routes/uploads');
+const dynamicQuestionsRoutes = require('./routes/dynamic-questions');
+const unionRoutes = require('./routes/union');
+const accountRequestsRoutes = require('./routes/account-requests');
+const exportsRoutes = require('./routes/exports');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -49,6 +57,9 @@ app.use('/api/', limiter);
 app.use(express.json({ limit: '10mb' }));
 app.use(express.urlencoded({ extended: true }));
 
+// Servir les fichiers statiques (uploads)
+app.use('/uploads', express.static(path.join(__dirname, '..', 'uploads')));
+
 // Logger des requêtes
 app.use((req, res, next) => {
   const start = Date.now();
@@ -70,6 +81,11 @@ app.use('/api/tickets', ticketsRoutes);
 app.use('/api/dashboard', dashboardRoutes);
 app.use('/api/notifications', notificationsRoutes);
 app.use('/api/admin', adminRoutes);
+app.use('/api/uploads', uploadsRoutes);
+app.use('/api/dynamic-questions', dynamicQuestionsRoutes);
+app.use('/api/union', unionRoutes);
+app.use('/api/account-requests', accountRequestsRoutes);
+app.use('/api/exports', exportsRoutes);
 
 // Route de santé
 app.get('/api/health', async (req, res) => {
@@ -79,6 +95,7 @@ app.get('/api/health', async (req, res) => {
       status: 'healthy',
       timestamp: new Date().toISOString(),
       database: 'connected',
+      websocket_connections: getActiveConnections(),
       version: '1.0.0'
     });
   } catch (err) {
@@ -136,7 +153,13 @@ app.use((err, req, res, next) => {
 // DÉMARRAGE DU SERVEUR
 // ====================================
 
-const server = app.listen(PORT, () => {
+// Créer le serveur HTTP
+const server = http.createServer(app);
+
+// Initialiser WebSocket
+const io = initWebSocket(server);
+
+server.listen(PORT, () => {
   console.log('\n' + '='.repeat(50));
   console.log('🚀 SOS API Server');
   console.log('='.repeat(50));
@@ -144,6 +167,7 @@ const server = app.listen(PORT, () => {
   console.log(`🌍 Environnement: ${process.env.NODE_ENV || 'development'}`);
   console.log(`🔗 URL: http://localhost:${PORT}`);
   console.log(`📋 API: http://localhost:${PORT}/api`);
+  console.log(`🔌 WebSocket: ws://localhost:${PORT}`);
   console.log('='.repeat(50) + '\n');
 });
 

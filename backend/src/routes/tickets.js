@@ -651,4 +651,45 @@ router.put('/:id/visibility', authenticate, async (req, res) => {
   }
 });
 
+// ====================================
+// GET /api/tickets/:id/history - Historique d'un ticket
+// ====================================
+router.get('/:id/history', authenticate, async (req, res) => {
+  try {
+    const { id } = req.params;
+
+    // Vérifier l'accès au ticket
+    const { rows: ticketRows } = await query(
+      'SELECT agency_id FROM tickets WHERE id = $1',
+      [id]
+    );
+
+    if (ticketRows.length === 0) {
+      return res.status(404).json({ error: 'Ticket non trouvé' });
+    }
+
+    // Récupérer l'historique avec les noms des utilisateurs
+    const { rows } = await query(`
+      SELECT
+        th.id,
+        th.action,
+        th.field_name,
+        th.old_value,
+        th.new_value,
+        th.details,
+        th.created_at,
+        u.first_name || ' ' || u.last_name as user_name
+      FROM ticket_history th
+      JOIN users u ON th.user_id = u.id
+      WHERE th.ticket_id = $1
+      ORDER BY th.created_at ASC
+    `, [id]);
+
+    res.json(rows);
+  } catch (err) {
+    console.error('Erreur récupération historique:', err);
+    res.status(500).json({ error: 'Erreur lors de la récupération de l\'historique' });
+  }
+});
+
 module.exports = router;

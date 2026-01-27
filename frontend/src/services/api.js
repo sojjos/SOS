@@ -68,7 +68,9 @@ export const ticketsAPI = {
   validate: (id, data) => api.put(`/tickets/${id}/validate`, data),
   updateStatus: (id, data) => api.put(`/tickets/${id}/status`, data),
   addComment: (id, data) => api.post(`/tickets/${id}/comments`, data),
-  toggleUnionVisibility: (id, visible) => api.put(`/tickets/${id}/visibility`, { visible_to_union: visible })
+  toggleUnionVisibility: (id, visible) => api.put(`/tickets/${id}/visibility`, { visible_to_union: visible }),
+  getHistory: (id) => api.get(`/tickets/${id}/history`),
+  getAttachments: (id) => api.get(`/uploads/ticket/${id}`)
 };
 
 export const dashboardAPI = {
@@ -149,5 +151,66 @@ export const adminAPI = {
   getLogs: (params) => api.get('/admin/logs', { params }),
 
   // Stats globales
-  getStats: () => api.get('/admin/stats')
+  getStats: () => api.get('/admin/stats'),
+
+  // Demandes de compte
+  getAccountRequests: (params) => api.get('/account-requests', { params }),
+  getAccountRequest: (id) => api.get(`/account-requests/${id}`),
+  approveRequest: (id, data) => api.post(`/account-requests/${id}/approve`, data),
+  rejectRequest: (id, reason) => api.post(`/account-requests/${id}/reject`, { reason }),
+
+  // Questions dynamiques
+  getDynamicQuestions: (agencyId) => api.get(`/admin/agencies/${agencyId}/dynamic-questions`),
+  createDynamicQuestion: (data) => api.post('/dynamic-questions', data),
+  updateDynamicQuestion: (id, data) => api.put(`/dynamic-questions/${id}`, data),
+  deleteDynamicQuestion: (id) => api.delete(`/dynamic-questions/${id}`),
+
+  // Permissions d'export
+  getExportPermissions: (agencyId) => api.get(`/admin/agencies/${agencyId}/export-permissions`),
+  updateExportPermissions: (id, data) => api.put(`/admin/export-permissions/${id}`, data)
 };
+
+// Uploads / Pièces jointes
+export const uploadsAPI = {
+  upload: (formData, config) => api.post('/uploads', formData, {
+    headers: { 'Content-Type': 'multipart/form-data' },
+    ...config
+  }),
+  getForTicket: (ticketId) => api.get(`/uploads/ticket/${ticketId}`),
+  download: (id) => api.get(`/uploads/${id}/download`, { responseType: 'blob' }),
+  delete: (id) => api.delete(`/uploads/${id}`)
+};
+
+// Questions dynamiques
+export const dynamicQuestionsAPI = {
+  getForAgency: (agencyId, params) => api.get(`/dynamic-questions/agency/${agencyId}`, { params }),
+  getForTicket: (ticketId) => api.get(`/dynamic-questions/ticket/${ticketId}`),
+  saveResponses: (ticketId, responses) => api.post(`/dynamic-questions/ticket/${ticketId}/responses`, { responses })
+};
+
+// Vue Syndicat
+export const unionAPI = {
+  getDashboard: (agencyId) => api.get('/union/dashboard', { params: { agency_id: agencyId } }),
+  getTickets: (params) => api.get('/union/tickets', { params }),
+  getTicket: (id) => api.get(`/union/tickets/${id}`),
+  getAgencies: () => api.get('/union/agencies'),
+  getComparison: () => api.get('/union/stats/comparison'),
+  getFilters: (agencyId) => api.get('/union/filters', { params: { agency_id: agencyId } })
+};
+
+// Demandes de compte (public)
+export const accountRequestsAPI = {
+  create: (data) => api.post('/account-requests', data),
+  checkStatus: (email) => api.get(`/account-requests/status/${email}`)
+};
+
+// Exports
+export const exportsAPI = {
+  exportTickets: (data) => api.post('/exports/tickets', data),
+  exportStats: (data) => api.post('/exports/stats', data),
+  download: (id) => api.get(`/exports/${id}/download`, { responseType: 'blob' }),
+  list: () => api.get('/exports')
+};
+
+// Agences publiques (pour la demande de compte)
+agenciesAPI.listPublic = () => api.get('/agencies/public');

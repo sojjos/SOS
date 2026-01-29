@@ -23,6 +23,8 @@ const unionRoutes = require('./routes/union');
 const accountRequestsRoutes = require('./routes/account-requests');
 const exportsRoutes = require('./routes/exports');
 const templatesRoutes = require('./routes/templates');
+const platformRoutes = require('./routes/platform');
+const registrationRoutes = require('./routes/registration');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -88,6 +90,12 @@ app.use('/api/union', unionRoutes);
 app.use('/api/account-requests', accountRequestsRoutes);
 app.use('/api/exports', exportsRoutes);
 app.use('/api/templates', templatesRoutes);
+
+// Routes plateforme SaaS (admin plateforme)
+app.use('/api/platform', platformRoutes);
+
+// Routes d'inscription avec code d'invitation
+app.use('/api/register', registrationRoutes);
 
 // Route de santé
 app.get('/api/health', async (req, res) => {

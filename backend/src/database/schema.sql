@@ -793,5 +793,303 @@ CREATE INDEX idx_templates_agency ON ticket_templates(agency_id);
 CREATE INDEX idx_templates_active ON ticket_templates(agency_id, is_active);
 
 -- ====================================
+-- TABLES SAAS MULTI-TENANT
+-- ====================================
+
+-- Table des entreprises (tenants)
+CREATE TABLE IF NOT EXISTS companies (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    name VARCHAR(200) NOT NULL,
+    slug VARCHAR(100) NOT NULL UNIQUE,
+
+    -- Contact principal
+    contact_email VARCHAR(255) NOT NULL,
+    contact_phone VARCHAR(20),
+    contact_name VARCHAR(200),
+
+    -- Adresse
+    address TEXT,
+    city VARCHAR(100),
+    postal_code VARCHAR(20),
+    country VARCHAR(50) DEFAULT 'Belgique',
+
+    -- Configuration
+    logo_url TEXT,
+    primary_color VARCHAR(7) DEFAULT '#0066CC',
+    config JSONB DEFAULT '{}',
+
+    -- Quotas et limites
+    max_sites INTEGER DEFAULT 5,
+    max_users INTEGER DEFAULT 50,
+    max_admins INTEGER DEFAULT 3,
+    storage_limit_mb INTEGER DEFAULT 5120,
+
+    -- Abonnement
+    subscription_plan VARCHAR(50) DEFAULT 'starter' CHECK (subscription_plan IN ('starter', 'professional', 'enterprise', 'unlimited')),
+    subscription_status VARCHAR(20) DEFAULT 'active' CHECK (subscription_status IN ('trial', 'active', 'suspended', 'cancelled')),
+    trial_ends_at TIMESTAMP WITH TIME ZONE,
+    subscription_ends_at TIMESTAMP WITH TIME ZONE,
+
+    -- Statistiques
+    current_sites_count INTEGER DEFAULT 0,
+    current_users_count INTEGER DEFAULT 0,
+    current_admins_count INTEGER DEFAULT 0,
+    current_storage_used_mb INTEGER DEFAULT 0,
+
+    -- Metadonnees
+    is_active BOOLEAN DEFAULT true,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_companies_slug ON companies(slug);
+CREATE INDEX idx_companies_subscription ON companies(subscription_status);
+CREATE INDEX idx_companies_active ON companies(is_active);
+
+-- Table des codes d'invitation
+CREATE TABLE IF NOT EXISTS invitation_codes (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    company_id UUID REFERENCES companies(id) ON DELETE CASCADE,
+
+    -- Code unique
+    code VARCHAR(50) NOT NULL UNIQUE,
+
+    -- Configuration
+    code_type VARCHAR(30) NOT NULL CHECK (code_type IN ('company_registration', 'user_invite', 'admin_invite')),
+
+    -- Pour les invitations utilisateur
+    target_agency_id UUID REFERENCES agencies(id) ON DELETE CASCADE,
+    target_role VARCHAR(30),
+    target_level INTEGER,
+    target_profile_types JSONB DEFAULT '["terrain"]',
+
+    -- Limites
+    max_uses INTEGER DEFAULT 1,
+    current_uses INTEGER DEFAULT 0,
+
+    -- Validite
+    is_active BOOLEAN DEFAULT true,
+    expires_at TIMESTAMP WITH TIME ZONE,
+
+    -- Metadonnees
+    created_by_platform_admin UUID,
+    created_by_company_admin UUID REFERENCES users(id),
+    notes TEXT,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_invitation_codes_code ON invitation_codes(code);
+CREATE INDEX idx_invitation_codes_company ON invitation_codes(company_id);
+CREATE INDEX idx_invitation_codes_active ON invitation_codes(is_active, expires_at);
+
+-- Table des administrateurs de plateforme (super admins)
+CREATE TABLE IF NOT EXISTS platform_admins (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    email VARCHAR(255) NOT NULL UNIQUE,
+    password_hash VARCHAR(255) NOT NULL,
+    first_name VARCHAR(100) NOT NULL,
+    last_name VARCHAR(100) NOT NULL,
+
+    -- Permissions
+    role VARCHAR(30) DEFAULT 'admin' CHECK (role IN ('viewer', 'admin', 'super_admin')),
+    permissions JSONB DEFAULT '{}',
+
+    -- Securite
+    is_active BOOLEAN DEFAULT true,
+    must_change_password BOOLEAN DEFAULT false,
+    two_factor_enabled BOOLEAN DEFAULT false,
+    two_factor_secret VARCHAR(255),
+
+    -- Sessions
+    last_login TIMESTAMP WITH TIME ZONE,
+    last_login_ip VARCHAR(45),
+
+    -- Metadonnees
+    created_by UUID REFERENCES platform_admins(id),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_platform_admins_email ON platform_admins(email);
+CREATE INDEX idx_platform_admins_active ON platform_admins(is_active);
+
+-- Table des logs de plateforme
+CREATE TABLE IF NOT EXISTS platform_logs (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    platform_admin_id UUID REFERENCES platform_admins(id),
+    company_id UUID REFERENCES companies(id),
+
+    action VARCHAR(100) NOT NULL,
+    entity_type VARCHAR(50),
+    entity_id UUID,
+    details JSONB,
+
+    ip_address VARCHAR(45),
+    user_agent TEXT,
+
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE INDEX idx_platform_logs_admin ON platform_logs(platform_admin_id);
+CREATE INDEX idx_platform_logs_company ON platform_logs(company_id);
+CREATE INDEX idx_platform_logs_created ON platform_logs(created_at);
+
+-- Table historique des usages (facturation)
+CREATE TABLE IF NOT EXISTS company_usage_history (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    company_id UUID NOT NULL REFERENCES companies(id) ON DELETE CASCADE,
+
+    -- Periode
+    period_start DATE NOT NULL,
+    period_end DATE NOT NULL,
+
+    -- Metriques
+    sites_count INTEGER DEFAULT 0,
+    users_count INTEGER DEFAULT 0,
+    tickets_created INTEGER DEFAULT 0,
+    tickets_resolved INTEGER DEFAULT 0,
+    storage_used_mb INTEGER DEFAULT 0,
+    api_calls INTEGER DEFAULT 0,
+
+    -- Facturation
+    billing_status VARCHAR(20) DEFAULT 'pending' CHECK (billing_status IN ('pending', 'invoiced', 'paid', 'overdue')),
+    invoice_id VARCHAR(100),
+    amount_cents INTEGER,
+
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+
+    UNIQUE(company_id, period_start, period_end)
+);
+
+CREATE INDEX idx_usage_history_company ON company_usage_history(company_id);
+CREATE INDEX idx_usage_history_period ON company_usage_history(period_start, period_end);
+
+-- ====================================
+-- MODIFICATIONS TABLES EXISTANTES POUR MULTI-TENANT
+-- ====================================
+
+-- Ajouter company_id aux agences
+ALTER TABLE agencies ADD COLUMN IF NOT EXISTS company_id UUID REFERENCES companies(id) ON DELETE CASCADE;
+CREATE INDEX IF NOT EXISTS idx_agencies_company ON agencies(company_id);
+
+-- Ajouter company_id aux utilisateurs
+ALTER TABLE users ADD COLUMN IF NOT EXISTS company_id UUID REFERENCES companies(id) ON DELETE SET NULL;
+CREATE INDEX IF NOT EXISTS idx_users_company ON users(company_id);
+
+-- Ajouter invited_by_code aux utilisateurs pour tracer les invitations
+ALTER TABLE users ADD COLUMN IF NOT EXISTS invited_by_code VARCHAR(50);
+
+-- ====================================
+-- VUES SAAS
+-- ====================================
+
+-- Vue statistiques par entreprise
+CREATE OR REPLACE VIEW v_company_stats AS
+SELECT
+    c.id AS company_id,
+    c.name AS company_name,
+    c.slug,
+    c.subscription_plan,
+    c.subscription_status,
+    c.max_sites,
+    c.max_users,
+    c.max_admins,
+    COUNT(DISTINCT a.id) AS current_sites,
+    COUNT(DISTINCT u.id) AS current_users,
+    COUNT(DISTINCT CASE WHEN u.account_type = 'admin' THEN u.id END) AS current_admins,
+    COUNT(DISTINCT t.id) AS total_tickets,
+    COUNT(DISTINCT CASE WHEN t.status IN ('nouveau', 'en_attente_validation', 'en_analyse', 'en_cours') THEN t.id END) AS open_tickets,
+    ROUND(AVG(CASE WHEN t.resolved_at IS NOT NULL
+        THEN EXTRACT(EPOCH FROM (t.resolved_at - t.created_at)) / 86400
+        END)::numeric, 2) AS avg_resolution_days
+FROM companies c
+LEFT JOIN agencies a ON c.id = a.company_id AND a.is_active = true
+LEFT JOIN users u ON c.id = u.company_id AND u.is_active = true
+LEFT JOIN tickets t ON a.id = t.agency_id
+WHERE c.is_active = true
+GROUP BY c.id, c.name, c.slug, c.subscription_plan, c.subscription_status, c.max_sites, c.max_users, c.max_admins;
+
+-- ====================================
+-- TRIGGERS SAAS
+-- ====================================
+
+-- Trigger pour updated_at sur companies
+CREATE TRIGGER update_companies_updated_at BEFORE UPDATE ON companies
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- Trigger pour updated_at sur platform_admins
+CREATE TRIGGER update_platform_admins_updated_at BEFORE UPDATE ON platform_admins
+    FOR EACH ROW EXECUTE FUNCTION update_updated_at_column();
+
+-- Fonction pour mettre a jour les compteurs d'entreprise
+CREATE OR REPLACE FUNCTION update_company_counts()
+RETURNS TRIGGER AS $$
+BEGIN
+    -- Mise a jour des compteurs lors de l'ajout/suppression d'agences
+    IF TG_TABLE_NAME = 'agencies' THEN
+        IF TG_OP = 'INSERT' AND NEW.company_id IS NOT NULL THEN
+            UPDATE companies SET current_sites_count = current_sites_count + 1 WHERE id = NEW.company_id;
+        ELSIF TG_OP = 'DELETE' AND OLD.company_id IS NOT NULL THEN
+            UPDATE companies SET current_sites_count = current_sites_count - 1 WHERE id = OLD.company_id;
+        ELSIF TG_OP = 'UPDATE' AND OLD.company_id IS DISTINCT FROM NEW.company_id THEN
+            IF OLD.company_id IS NOT NULL THEN
+                UPDATE companies SET current_sites_count = current_sites_count - 1 WHERE id = OLD.company_id;
+            END IF;
+            IF NEW.company_id IS NOT NULL THEN
+                UPDATE companies SET current_sites_count = current_sites_count + 1 WHERE id = NEW.company_id;
+            END IF;
+        END IF;
+    -- Mise a jour des compteurs lors de l'ajout/suppression d'utilisateurs
+    ELSIF TG_TABLE_NAME = 'users' THEN
+        IF TG_OP = 'INSERT' AND NEW.company_id IS NOT NULL THEN
+            IF NEW.account_type = 'admin' THEN
+                UPDATE companies SET current_users_count = current_users_count + 1, current_admins_count = current_admins_count + 1 WHERE id = NEW.company_id;
+            ELSE
+                UPDATE companies SET current_users_count = current_users_count + 1 WHERE id = NEW.company_id;
+            END IF;
+        ELSIF TG_OP = 'DELETE' AND OLD.company_id IS NOT NULL THEN
+            IF OLD.account_type = 'admin' THEN
+                UPDATE companies SET current_users_count = current_users_count - 1, current_admins_count = current_admins_count - 1 WHERE id = OLD.company_id;
+            ELSE
+                UPDATE companies SET current_users_count = current_users_count - 1 WHERE id = OLD.company_id;
+            END IF;
+        END IF;
+    END IF;
+
+    IF TG_OP = 'DELETE' THEN
+        RETURN OLD;
+    END IF;
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Triggers pour compteurs
+CREATE TRIGGER update_company_sites_count
+    AFTER INSERT OR UPDATE OR DELETE ON agencies
+    FOR EACH ROW
+    EXECUTE FUNCTION update_company_counts();
+
+CREATE TRIGGER update_company_users_count
+    AFTER INSERT OR DELETE ON users
+    FOR EACH ROW
+    EXECUTE FUNCTION update_company_counts();
+
+-- ====================================
+-- DONNEES INITIALES PLATEFORME
+-- ====================================
+
+-- Creer un super admin par defaut (mot de passe: PlatformAdmin123!)
+-- Le hash est pour: PlatformAdmin123!
+INSERT INTO platform_admins (id, email, password_hash, first_name, last_name, role)
+VALUES (
+    'a0000000-0000-0000-0000-000000000001',
+    'platform@sos.local',
+    '$2a$10$rQXRj.YzJ3YI8h6z4qJH0uGzK8v.L5LwF2KN5VQvJ1Hg7Xq7Jf5Gy',
+    'Platform',
+    'Admin',
+    'super_admin'
+) ON CONFLICT (email) DO NOTHING;
+
+-- ====================================
 -- FIN DU SCHÉMA UNIFIÉ
 -- ====================================

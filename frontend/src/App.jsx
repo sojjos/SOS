@@ -9,12 +9,21 @@ import PWAInstallPrompt from './components/PWAInstallPrompt';
 // Layouts
 import MainLayout from './layouts/MainLayout';
 import AuthLayout from './layouts/AuthLayout';
+import PlatformLayout from './layouts/PlatformLayout';
 
 // Pages Auth
 import LoginPage from './pages/auth/LoginPage';
 import ForgotPasswordPage from './pages/auth/ForgotPasswordPage';
 import ResetPasswordPage from './pages/auth/ResetPasswordPage';
 import RequestAccountPage from './pages/auth/RequestAccountPage';
+import RegisterCompanyPage from './pages/auth/RegisterCompanyPage';
+
+// Pages Platform Admin
+import PlatformLoginPage from './pages/platform/PlatformLoginPage';
+import PlatformDashboardPage from './pages/platform/PlatformDashboardPage';
+import PlatformCompaniesPage from './pages/platform/PlatformCompaniesPage';
+import PlatformInvitationsPage from './pages/platform/PlatformInvitationsPage';
+import PlatformAdminsPage from './pages/platform/PlatformAdminsPage';
 
 // Pages principales
 import DashboardPage from './pages/DashboardPage';
@@ -168,6 +177,24 @@ function App() {
             </PublicRoute>
           }
         />
+        <Route
+          path="/register"
+          element={
+            <PublicRoute>
+              <RegisterCompanyPage />
+            </PublicRoute>
+          }
+        />
+      </Route>
+
+      {/* Routes Platform Admin */}
+      <Route path="/platform/login" element={<PlatformLoginPage />} />
+      <Route element={<PlatformLayout />}>
+        <Route path="/platform/dashboard" element={<PlatformDashboardPage />} />
+        <Route path="/platform/companies" element={<PlatformCompaniesPage />} />
+        <Route path="/platform/companies/:id" element={<PlatformCompaniesPage />} />
+        <Route path="/platform/invitations" element={<PlatformInvitationsPage />} />
+        <Route path="/platform/admins" element={<PlatformAdminsPage />} />
       </Route>
 
       {/* Routes protégées */}

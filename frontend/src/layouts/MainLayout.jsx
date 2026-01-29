@@ -18,6 +18,8 @@ import {
 import useAuthStore from '../store/authStore';
 import useNotificationStore from '../store/notificationStore';
 import { agenciesAPI } from '../services/api';
+import { switchAgencyRoom } from '../services/websocket';
+import NotificationDropdown from '../components/NotificationDropdown';
 import clsx from 'clsx';
 
 function MainLayout() {
@@ -138,6 +140,7 @@ function MainLayout() {
                       key={agency.id}
                       onClick={() => {
                         setCurrentAgency(agency);
+                        switchAgencyRoom(agency.id);
                         setAgencyMenuOpen(false);
                       }}
                       className={clsx(
@@ -242,14 +245,7 @@ function MainLayout() {
             <Menu className="w-6 h-6" />
           </button>
           <h1 className="font-bold text-gray-900">SOS</h1>
-          <Link to="/notifications" className="p-2 rounded-lg hover:bg-gray-100 relative">
-            <Bell className="w-6 h-6" />
-            {unreadCount > 0 && (
-              <span className="absolute top-1 right-1 w-4 h-4 bg-red-500 text-white text-xs rounded-full flex items-center justify-center">
-                {unreadCount > 9 ? '9+' : unreadCount}
-              </span>
-            )}
-          </Link>
+          <NotificationDropdown />
         </header>
 
         {/* Page content */}

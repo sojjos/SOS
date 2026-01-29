@@ -1,6 +1,10 @@
 import { useEffect } from 'react';
 import { Routes, Route, Navigate } from 'react-router-dom';
+import { Toaster } from 'react-hot-toast';
 import useAuthStore from './store/authStore';
+import { initWebSocket, disconnectWebSocket } from './services/websocket';
+import PWAUpdatePrompt from './components/PWAUpdatePrompt';
+import PWAInstallPrompt from './components/PWAInstallPrompt';
 
 // Layouts
 import MainLayout from './layouts/MainLayout';
@@ -99,14 +103,36 @@ function UnionRoute({ children }) {
 }
 
 function App() {
-  const { initialize } = useAuthStore();
+  const { initialize, isAuthenticated, token } = useAuthStore();
 
   useEffect(() => {
     initialize();
   }, [initialize]);
 
+  // Initialiser WebSocket quand l'utilisateur est authentifie
+  useEffect(() => {
+    if (isAuthenticated && token) {
+      initWebSocket();
+    }
+
+    return () => {
+      disconnectWebSocket();
+    };
+  }, [isAuthenticated, token]);
+
   return (
-    <Routes>
+    <>
+      <Toaster
+        position="top-right"
+        toastOptions={{
+          duration: 5000,
+          style: {
+            background: '#fff',
+            color: '#363636',
+          },
+        }}
+      />
+      <Routes>
       {/* Routes publiques (authentification) */}
       <Route element={<AuthLayout />}>
         <Route
@@ -237,6 +263,9 @@ function App() {
       {/* 404 */}
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
+    <PWAUpdatePrompt />
+    <PWAInstallPrompt />
+    </>
   );
 }
 

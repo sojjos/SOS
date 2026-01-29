@@ -22,6 +22,7 @@ const dynamicQuestionsRoutes = require('./routes/dynamic-questions');
 const unionRoutes = require('./routes/union');
 const accountRequestsRoutes = require('./routes/account-requests');
 const exportsRoutes = require('./routes/exports');
+const templatesRoutes = require('./routes/templates');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -86,6 +87,7 @@ app.use('/api/dynamic-questions', dynamicQuestionsRoutes);
 app.use('/api/union', unionRoutes);
 app.use('/api/account-requests', accountRequestsRoutes);
 app.use('/api/exports', exportsRoutes);
+app.use('/api/templates', templatesRoutes);
 
 // Route de santé
 app.get('/api/health', async (req, res) => {

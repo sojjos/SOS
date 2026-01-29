@@ -4,6 +4,7 @@ import { ArrowLeft, Send, AlertCircle, Info, HelpCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import useAuthStore from '../../store/authStore';
 import { ticketsAPI, agenciesAPI } from '../../services/api';
+import TemplateSelector from '../../components/TemplateSelector';
 import clsx from 'clsx';
 
 function CreateTicketPage() {

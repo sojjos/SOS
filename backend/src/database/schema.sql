@@ -758,6 +758,40 @@ CREATE TRIGGER log_ticket_history
     FOR EACH ROW
     EXECUTE FUNCTION log_ticket_changes();
 
+-- Table des templates de tickets
+CREATE TABLE IF NOT EXISTS ticket_templates (
+    id UUID PRIMARY KEY DEFAULT uuid_generate_v4(),
+    agency_id UUID NOT NULL REFERENCES agencies(id) ON DELETE CASCADE,
+
+    -- Informations du template
+    name VARCHAR(100) NOT NULL,
+    description TEXT,
+
+    -- Contenu pre-rempli
+    title_template VARCHAR(255),
+    description_template TEXT,
+    problem_type_id UUID REFERENCES problem_types(id),
+    default_urgency VARCHAR(20) CHECK (default_urgency IN ('critique', 'haute', 'moyenne', 'basse')),
+    default_blocking VARCHAR(20) CHECK (default_blocking IN ('bloquant', 'partiel', 'non_bloquant')),
+    default_location_id UUID REFERENCES locations(id),
+    profile_type VARCHAR(20) DEFAULT 'terrain' CHECK (profile_type IN ('terrain', 'administratif')),
+
+    -- Restrictions d'acces
+    min_level_required INTEGER DEFAULT 0,
+
+    -- Metadonnees
+    is_active BOOLEAN DEFAULT true,
+    usage_count INTEGER DEFAULT 0,
+    created_by UUID REFERENCES users(id),
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+
+    UNIQUE(agency_id, name)
+);
+
+CREATE INDEX idx_templates_agency ON ticket_templates(agency_id);
+CREATE INDEX idx_templates_active ON ticket_templates(agency_id, is_active);
+
 -- ====================================
 -- FIN DU SCHÉMA UNIFIÉ
 -- ====================================

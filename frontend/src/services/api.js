@@ -214,3 +214,13 @@ export const exportsAPI = {
 
 // Agences publiques (pour la demande de compte)
 agenciesAPI.listPublic = () => api.get('/agencies/public');
+
+// Templates de tickets
+export const templatesAPI = {
+  list: (agencyId) => api.get(`/templates/agency/${agencyId}`),
+  get: (id) => api.get(`/templates/${id}`),
+  create: (data) => api.post('/templates', data),
+  update: (id, data) => api.put(`/templates/${id}`, data),
+  delete: (id) => api.delete(`/templates/${id}`),
+  adminList: (agencyId) => api.get(`/templates/admin/agency/${agencyId}`)
+};

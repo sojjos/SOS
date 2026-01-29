@@ -21,6 +21,10 @@ router.get('/', authenticate, async (req, res) => {
       responsible,
       my_tickets,
       pending_validation,
+      search,
+      date_from,
+      date_to,
+      sla_exceeded,
       page = 1,
       limit = 25,
       sort_by = 'created_at',
@@ -153,6 +157,35 @@ router.get('/', authenticate, async (req, res) => {
     if (pending_validation === 'true') {
       baseQuery += ` AND t.status = 'en_attente_validation' AND t.current_responsible = $${paramIndex++}`;
       params.push(user.id);
+    }
+
+    // Recherche textuelle
+    if (search && search.trim()) {
+      const searchTerm = `%${search.trim().toLowerCase()}%`;
+      baseQuery += ` AND (
+        LOWER(t.title) LIKE $${paramIndex++}
+        OR LOWER(t.description) LIKE $${paramIndex++}
+        OR t.ticket_number::text LIKE $${paramIndex++}
+        OR LOWER(uc.first_name || ' ' || uc.last_name) LIKE $${paramIndex++}
+      )`;
+      params.push(searchTerm, searchTerm, searchTerm, searchTerm);
+    }
+
+    // Filtre par date de creation
+    if (date_from) {
+      baseQuery += ` AND t.created_at >= $${paramIndex++}`;
+      params.push(date_from);
+    }
+    if (date_to) {
+      baseQuery += ` AND t.created_at <= $${paramIndex++}`;
+      params.push(date_to + 'T23:59:59');
+    }
+
+    // Filtre SLA depasse
+    if (sla_exceeded === 'true') {
+      baseQuery += ` AND t.sla_resolution_deadline IS NOT NULL
+        AND t.status NOT IN ('resolu', 'cloture')
+        AND t.sla_resolution_deadline < CURRENT_TIMESTAMP`;
     }
 
     // Comptage total

@@ -13,7 +13,8 @@ import {
   ChevronDown,
   Shield,
   Globe,
-  Users
+  Users,
+  BarChart3
 } from 'lucide-react';
 import useAuthStore from '../store/authStore';
 import useNotificationStore from '../store/notificationStore';
@@ -29,7 +30,8 @@ function MainLayout() {
   const [agencyMenuOpen, setAgencyMenuOpen] = useState(false);
   const [agencies, setAgencies] = useState([]);
 
-  const { user, currentAgency, setCurrentAgency, logout, isAdmin, isUnionMember, adminMode, toggleAdminMode } = useAuthStore();
+  const { user, currentAgency, setCurrentAgency, logout, isAdmin, isUnionMember, adminMode, toggleAdminMode, getCurrentLevel } = useAuthStore();
+  const currentLevel = getCurrentLevel();
   const { unreadCount, fetchUnreadCount } = useNotificationStore();
 
   // Charger les agences disponibles
@@ -67,6 +69,8 @@ function MainLayout() {
     { path: '/', icon: LayoutDashboard, label: 'Dashboard' },
     { path: '/tickets', icon: Ticket, label: 'Tickets' },
     { path: '/notifications', icon: Bell, label: 'Notifications', badge: unreadCount },
+    // Analytics pour niveau 2+
+    ...(currentLevel >= 2 || isAdmin() ? [{ path: '/analytics', icon: BarChart3, label: 'Analytics' }] : []),
     { path: '/profile', icon: User, label: 'Profil' },
     // Afficher le lien syndicat uniquement pour les membres du syndicat
     ...(isUnionMember() ? [{ path: '/union', icon: Users, label: 'Vue Syndicat' }] : []),

@@ -1,17 +1,15 @@
 import { useState, useEffect } from 'react';
 import { Link, useSearchParams } from 'react-router-dom';
 import {
-  Search,
-  Filter,
   Plus,
-  ChevronDown,
   Clock,
   AlertCircle,
   CheckCircle,
   XCircle
 } from 'lucide-react';
 import useAuthStore from '../../store/authStore';
-import { ticketsAPI, agenciesAPI } from '../../services/api';
+import { ticketsAPI } from '../../services/api';
+import AdvancedSearch from '../../components/AdvancedSearch';
 import clsx from 'clsx';
 import { format } from 'date-fns';
 import { fr } from 'date-fns/locale';
@@ -23,30 +21,15 @@ function TicketsPage() {
   const [tickets, setTickets] = useState([]);
   const [isLoading, setIsLoading] = useState(true);
   const [pagination, setPagination] = useState({ total: 0, page: 1, limit: 20 });
-  const [showFilters, setShowFilters] = useState(false);
-  const [problemTypes, setProblemTypes] = useState([]);
 
-  // Filtres
-  const [filters, setFilters] = useState({
-    search: searchParams.get('search') || '',
-    status: searchParams.get('status') || '',
-    urgency: searchParams.get('urgency') || '',
-    problem_type_id: searchParams.get('type') || ''
+  // Filtres depuis URL
+  const [filters, setFilters] = useState(() => {
+    const initial = {};
+    searchParams.forEach((value, key) => {
+      initial[key] = value;
+    });
+    return initial;
   });
-
-  // Charger les types de problèmes
-  useEffect(() => {
-    const loadProblemTypes = async () => {
-      if (!currentAgency) return;
-      try {
-        const response = await agenciesAPI.getProblemTypes(currentAgency.id);
-        setProblemTypes(response.data);
-      } catch (error) {
-        console.error('Erreur chargement types de problèmes:', error);
-      }
-    };
-    loadProblemTypes();
-  }, [currentAgency]);
 
   // Charger les tickets
   useEffect(() => {
@@ -80,38 +63,20 @@ function TicketsPage() {
     loadTickets();
   }, [currentAgency, pagination.page, filters]);
 
-  // Mettre à jour les filtres
-  const handleFilterChange = (key, value) => {
-    setFilters(prev => ({ ...prev, [key]: value }));
+  // Gestion de la recherche avancee
+  const handleSearch = (searchFilters) => {
+    setFilters(searchFilters);
     setPagination(prev => ({ ...prev, page: 1 }));
 
-    // Mettre à jour l'URL
-    const newParams = new URLSearchParams(searchParams);
-    if (value) {
-      newParams.set(key, value);
-    } else {
-      newParams.delete(key);
-    }
+    // Mettre a jour l'URL
+    const newParams = new URLSearchParams();
+    Object.entries(searchFilters).forEach(([key, value]) => {
+      if (value !== '' && value !== false) {
+        newParams.set(key, value.toString());
+      }
+    });
     setSearchParams(newParams);
   };
-
-  const statusOptions = [
-    { value: '', label: 'Tous les statuts' },
-    { value: 'ouvert', label: 'Ouvert' },
-    { value: 'en_attente_validation', label: 'En attente validation' },
-    { value: 'valide', label: 'Validé' },
-    { value: 'en_cours', label: 'En cours' },
-    { value: 'resolu', label: 'Résolu' },
-    { value: 'cloture', label: 'Clôturé' }
-  ];
-
-  const urgencyOptions = [
-    { value: '', label: 'Toutes urgences' },
-    { value: 'critique', label: 'Critique' },
-    { value: 'haute', label: 'Haute' },
-    { value: 'moyenne', label: 'Moyenne' },
-    { value: 'basse', label: 'Basse' }
-  ];
 
   if (!currentAgency) {
     return (
@@ -135,89 +100,12 @@ function TicketsPage() {
         </Link>
       </div>
 
-      {/* Barre de recherche et filtres */}
-      <div className="card">
-        <div className="flex flex-col sm:flex-row gap-4">
-          {/* Recherche */}
-          <div className="relative flex-1">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-5 h-5 text-gray-400" />
-            <input
-              type="text"
-              placeholder="Rechercher par référence, titre..."
-              value={filters.search}
-              onChange={(e) => handleFilterChange('search', e.target.value)}
-              className="input pl-10"
-            />
-          </div>
-
-          {/* Bouton filtres */}
-          <button
-            onClick={() => setShowFilters(!showFilters)}
-            className={clsx(
-              'btn flex items-center gap-2',
-              showFilters ? 'btn-primary' : 'btn-secondary'
-            )}
-          >
-            <Filter className="w-5 h-5" />
-            Filtres
-            <ChevronDown className={clsx('w-4 h-4 transition-transform', showFilters && 'rotate-180')} />
-          </button>
-        </div>
-
-        {/* Filtres dépliables */}
-        {showFilters && (
-          <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4 mt-4 pt-4 border-t">
-            <div>
-              <label className="label">Statut</label>
-              <select
-                value={filters.status}
-                onChange={(e) => handleFilterChange('status', e.target.value)}
-                className="input"
-              >
-                {statusOptions.map(opt => (
-                  <option key={opt.value} value={opt.value}>{opt.label}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="label">Urgence</label>
-              <select
-                value={filters.urgency}
-                onChange={(e) => handleFilterChange('urgency', e.target.value)}
-                className="input"
-              >
-                {urgencyOptions.map(opt => (
-                  <option key={opt.value} value={opt.value}>{opt.label}</option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="label">Type de problème</label>
-              <select
-                value={filters.problem_type_id}
-                onChange={(e) => handleFilterChange('problem_type_id', e.target.value)}
-                className="input"
-              >
-                <option value="">Tous les types</option>
-                {problemTypes.map(type => (
-                  <option key={type.id} value={type.id}>{type.name}</option>
-                ))}
-              </select>
-            </div>
-            <div className="flex items-end">
-              <button
-                onClick={() => {
-                  setFilters({ search: '', status: '', urgency: '', problem_type_id: '' });
-                  setSearchParams(new URLSearchParams());
-                }}
-                className="btn btn-secondary w-full"
-              >
-                Réinitialiser
-              </button>
-            </div>
-          </div>
-        )}
-      </div>
+      {/* Recherche avancee */}
+      <AdvancedSearch
+        agencyId={currentAgency.id}
+        onSearch={handleSearch}
+        initialFilters={filters}
+      />
 
       {/* Liste des tickets */}
       {isLoading ? (
@@ -227,15 +115,15 @@ function TicketsPage() {
       ) : tickets.length === 0 ? (
         <div className="card text-center py-12">
           <AlertCircle className="w-12 h-12 text-gray-400 mx-auto mb-4" />
-          <h3 className="text-lg font-semibold text-gray-900 mb-2">Aucun ticket trouvé</h3>
+          <h3 className="text-lg font-semibold text-gray-900 mb-2">Aucun ticket trouve</h3>
           <p className="text-gray-600 mb-4">
-            {filters.search || filters.status || filters.urgency || filters.problem_type_id
+            {Object.keys(filters).length > 0
               ? 'Essayez de modifier vos filtres de recherche'
-              : 'Commencez par créer votre premier ticket'}
+              : 'Commencez par creer votre premier ticket'}
           </p>
-          {!filters.search && !filters.status && !filters.urgency && !filters.problem_type_id && (
+          {Object.keys(filters).length === 0 && (
             <Link to="/tickets/new" className="btn btn-primary">
-              Créer un ticket
+              Creer un ticket
             </Link>
           )}
         </div>

@@ -23,6 +23,7 @@ import TicketDetailPage from './pages/tickets/TicketDetailPage';
 import CreateTicketPage from './pages/tickets/CreateTicketPage';
 import ProfilePage from './pages/ProfilePage';
 import NotificationsPage from './pages/NotificationsPage';
+import AnalyticsPage from './pages/AnalyticsPage';
 
 // Pages Admin
 import AdminDashboard from './pages/admin/AdminDashboard';
@@ -190,6 +191,9 @@ function App() {
 
         {/* Notifications */}
         <Route path="/notifications" element={<NotificationsPage />} />
+
+        {/* Analytics */}
+        <Route path="/analytics" element={<AnalyticsPage />} />
 
         {/* Routes Admin */}
         <Route

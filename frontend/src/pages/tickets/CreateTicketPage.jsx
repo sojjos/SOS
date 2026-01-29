@@ -69,6 +69,28 @@ function CreateTicketPage() {
     }));
   };
 
+  // Gestion de la selection d'un template
+  const handleTemplateSelect = (template) => {
+    if (!template) {
+      // Reset si aucun template selectionne
+      return;
+    }
+
+    // Pre-remplir le formulaire avec les valeurs du template
+    setFormData(prev => ({
+      ...prev,
+      title: template.title_template || prev.title,
+      description: template.description_template || prev.description,
+      problem_type_id: template.problem_type_id || prev.problem_type_id,
+      primary_location_id: template.default_location_id || prev.primary_location_id,
+      proposed_urgency: template.default_urgency || prev.proposed_urgency,
+      proposed_blocking: template.default_blocking || prev.proposed_blocking,
+      profile_type: template.profile_type || prev.profile_type
+    }));
+
+    toast.success(`Template "${template.name}" applique`);
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
 
@@ -228,6 +250,13 @@ function CreateTicketPage() {
       )}
 
       <form onSubmit={handleSubmit} className="space-y-6">
+        {/* Selecteur de template */}
+        <TemplateSelector
+          agencyId={currentAgency.id}
+          profileType={formData.profile_type}
+          onSelect={handleTemplateSelect}
+        />
+
         {/* Informations principales */}
         <div className="card space-y-4">
           <h2 className="font-semibold text-gray-900">Informations du probleme</h2>

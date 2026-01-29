@@ -564,4 +564,158 @@ router.get('/multi-sites', authenticate, async (req, res) => {
   }
 });
 
+// ====================================
+// GET /api/dashboard/analytics - Analytics avances
+// ====================================
+router.get('/analytics', authenticate, async (req, res) => {
+  try {
+    const { agency_id, period = '30' } = req.query;
+
+    if (!agency_id) {
+      return res.status(400).json({ error: 'agency_id requis' });
+    }
+
+    const periodDays = parseInt(period);
+    const currentStart = new Date();
+    currentStart.setDate(currentStart.getDate() - periodDays);
+
+    const previousStart = new Date(currentStart);
+    previousStart.setDate(previousStart.getDate() - periodDays);
+
+    // KPIs periode actuelle vs precedente
+    const { rows: currentKPIs } = await query(`
+      SELECT
+        COUNT(*) as total_created,
+        COUNT(CASE WHEN status IN ('resolu', 'cloture') THEN 1 END) as total_resolved,
+        COUNT(CASE WHEN validated_urgency = 'critique' THEN 1 END) as critical_count,
+        ROUND(AVG(CASE WHEN resolved_at IS NOT NULL
+          THEN EXTRACT(EPOCH FROM (resolved_at - created_at)) / 3600 END)::numeric, 1) as avg_resolution_hours,
+        ROUND(
+          COUNT(CASE WHEN resolved_at IS NOT NULL AND resolved_at <= sla_resolution_deadline THEN 1 END)::numeric /
+          NULLIF(COUNT(CASE WHEN resolved_at IS NOT NULL THEN 1 END), 0) * 100
+        , 1) as sla_compliance,
+        ROUND(
+          COUNT(CASE WHEN te.id IS NOT NULL THEN 1 END)::numeric /
+          NULLIF(COUNT(*), 0) * 100
+        , 1) as escalation_rate
+      FROM tickets t
+      LEFT JOIN ticket_escalations te ON t.id = te.ticket_id
+      WHERE t.agency_id = $1
+      AND t.created_at >= $2
+    `, [agency_id, currentStart]);
+
+    const { rows: previousKPIs } = await query(`
+      SELECT
+        COUNT(*) as total_created,
+        COUNT(CASE WHEN status IN ('resolu', 'cloture') THEN 1 END) as total_resolved,
+        ROUND(AVG(CASE WHEN resolved_at IS NOT NULL
+          THEN EXTRACT(EPOCH FROM (resolved_at - created_at)) / 3600 END)::numeric, 1) as avg_resolution_hours,
+        ROUND(
+          COUNT(CASE WHEN resolved_at IS NOT NULL AND resolved_at <= sla_resolution_deadline THEN 1 END)::numeric /
+          NULLIF(COUNT(CASE WHEN resolved_at IS NOT NULL THEN 1 END), 0) * 100
+        , 1) as sla_compliance
+      FROM tickets
+      WHERE agency_id = $1
+      AND created_at >= $2 AND created_at < $3
+    `, [agency_id, previousStart, currentStart]);
+
+    // Distribution horaire (pour heatmap)
+    const { rows: hourlyDistribution } = await query(`
+      SELECT
+        EXTRACT(DOW FROM created_at)::int as day_of_week,
+        EXTRACT(HOUR FROM created_at)::int as hour,
+        COUNT(*) as count
+      FROM tickets
+      WHERE agency_id = $1
+      AND created_at >= $2
+      GROUP BY EXTRACT(DOW FROM created_at), EXTRACT(HOUR FROM created_at)
+      ORDER BY day_of_week, hour
+    `, [agency_id, currentStart]);
+
+    // Evolution quotidienne
+    const { rows: dailyTrend } = await query(`
+      SELECT
+        DATE(created_at) as date,
+        COUNT(*) as created,
+        COUNT(CASE WHEN status IN ('resolu', 'cloture') THEN 1 END) as resolved
+      FROM tickets
+      WHERE agency_id = $1
+      AND created_at >= $2
+      GROUP BY DATE(created_at)
+      ORDER BY date
+    `, [agency_id, currentStart]);
+
+    // Performance SLA par type de probleme
+    const { rows: slaByType } = await query(`
+      SELECT
+        pt.name,
+        pt.color,
+        COUNT(*) as total,
+        ROUND(
+          COUNT(CASE WHEN t.resolved_at <= t.sla_resolution_deadline THEN 1 END)::numeric /
+          NULLIF(COUNT(CASE WHEN t.resolved_at IS NOT NULL THEN 1 END), 0) * 100
+        , 1) as sla_rate,
+        ROUND(AVG(CASE WHEN t.resolved_at IS NOT NULL
+          THEN EXTRACT(EPOCH FROM (t.resolved_at - t.created_at)) / 3600 END)::numeric, 1) as avg_hours
+      FROM tickets t
+      JOIN problem_types pt ON t.problem_type_id = pt.id
+      WHERE t.agency_id = $1
+      AND t.created_at >= $2
+      GROUP BY pt.id, pt.name, pt.color
+      ORDER BY total DESC
+    `, [agency_id, currentStart]);
+
+    // Top 5 tickets les plus longs a resoudre
+    const { rows: slowestTickets } = await query(`
+      SELECT
+        t.id,
+        t.ticket_number,
+        t.title,
+        pt.name as problem_type,
+        ROUND(EXTRACT(EPOCH FROM (t.resolved_at - t.created_at)) / 3600, 1) as hours_to_resolve,
+        t.validated_urgency as urgency
+      FROM tickets t
+      LEFT JOIN problem_types pt ON t.problem_type_id = pt.id
+      WHERE t.agency_id = $1
+      AND t.resolved_at IS NOT NULL
+      AND t.created_at >= $2
+      ORDER BY (t.resolved_at - t.created_at) DESC
+      LIMIT 5
+    `, [agency_id, currentStart]);
+
+    // Calculer les variations
+    const current = currentKPIs[0] || {};
+    const previous = previousKPIs[0] || {};
+
+    const calculateChange = (curr, prev) => {
+      if (!prev || prev === 0) return null;
+      return Math.round(((curr - prev) / prev) * 100);
+    };
+
+    res.json({
+      kpis: {
+        total_created: parseInt(current.total_created) || 0,
+        total_resolved: parseInt(current.total_resolved) || 0,
+        critical_count: parseInt(current.critical_count) || 0,
+        avg_resolution_hours: parseFloat(current.avg_resolution_hours) || 0,
+        sla_compliance: parseFloat(current.sla_compliance) || 0,
+        escalation_rate: parseFloat(current.escalation_rate) || 0,
+        changes: {
+          created: calculateChange(current.total_created, previous.total_created),
+          resolved: calculateChange(current.total_resolved, previous.total_resolved),
+          resolution_time: calculateChange(current.avg_resolution_hours, previous.avg_resolution_hours),
+          sla: calculateChange(current.sla_compliance, previous.sla_compliance)
+        }
+      },
+      hourlyDistribution,
+      dailyTrend,
+      slaByType,
+      slowestTickets
+    });
+  } catch (err) {
+    console.error('Erreur dashboard analytics:', err);
+    res.status(500).json({ error: 'Erreur' });
+  }
+});
+
 module.exports = router;

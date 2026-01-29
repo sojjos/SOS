@@ -78,7 +78,8 @@ export const dashboardAPI = {
   team: (agencyId) => api.get('/dashboard/team', { params: { agency_id: agencyId } }),
   site: (agencyId) => api.get('/dashboard/site', { params: { agency_id: agencyId } }),
   direction: (agencyId) => api.get('/dashboard/direction', { params: { agency_id: agencyId } }),
-  multiSites: (params) => api.get('/dashboard/multi-sites', { params })
+  multiSites: (params) => api.get('/dashboard/multi-sites', { params }),
+  analytics: (agencyId, period) => api.get('/dashboard/analytics', { params: { agency_id: agencyId, period } })
 };
 
 export const agenciesAPI = {

@@ -879,61 +879,175 @@ SOS est une plateforme SaaS de ticketing concue pour gerer les incidents operati
 
 ### Prerequis
 
-- Docker et Docker Compose
-- Git
-- 2 Go RAM minimum
-- 10 Go espace disque
+- Serveur Linux (Ubuntu 20.04+, Debian 11+, CentOS 8+, Rocky Linux)
+- 2 Go RAM minimum (4 Go recommande)
+- 20 Go espace disque
+- Acces root ou sudo
 
-### Installation rapide
+### Option 1: Deploiement automatique complet (recommande)
+
+Pour un serveur vierge, utilisez le script de deploiement automatique qui installe tout (Docker, firewall, SSL, backups):
+
+```bash
+# Cloner le repository
+git clone <url-du-repo> /opt/sos
+cd /opt/sos
+
+# Deploiement interactif (recommande pour premiere installation)
+sudo bash deploy/deploy.sh
+
+# OU deploiement automatique (sans prompts)
+sudo DOMAIN=sos.example.com ENABLE_SSL=true SSL_EMAIL=admin@example.com bash deploy/deploy.sh --auto
+```
+
+Le script de deploiement:
+- Installe Docker et Docker Compose
+- Configure le firewall (UFW/Firewalld)
+- Genere les secrets securises automatiquement
+- Configure SSL avec Let's Encrypt (optionnel)
+- Cree un service systemd pour demarrage automatique
+- Configure les backups automatiques (quotidiens a 2h)
+- Initialise la base de donnees avec les comptes admin
+
+### Option 2: Installation rapide (Docker requis)
+
+Si Docker est deja installe:
 
 ```bash
 # Cloner le repository
 git clone <url-du-repo> sos
 cd sos
 
-# Configurer les variables d'environnement
+# Installation interactive
+./install.sh
+
+# OU installation automatique
+AUTO_MODE=true ./install.sh --auto
+
+# OU via Make
+make setup-dev
+```
+
+### Option 3: Installation manuelle
+
+```bash
+# Cloner et configurer
+git clone <url-du-repo> sos
+cd sos
 cp .env.example .env
 # Editer .env avec vos valeurs
 
 # Lancer les services
-docker-compose up -d
+docker compose up -d
 
-# L'application est accessible sur:
-# - Frontend: http://localhost:3000
-# - API: http://localhost:3001
-# - Platform Admin: http://localhost:3000/platform/login
+# Initialiser la base de donnees
+docker compose exec backend node src/seeds/run.js
+docker compose exec backend node src/seeds/platform_admin.js
 ```
 
 ### Acces par defaut
 
-| Interface | URL | Identifiants |
-|-----------|-----|--------------|
-| Platform Admin | `/platform/login` | `platform@sos.local` / `PlatformAdmin123!` |
-| Application | `/login` | Creer via code d'invitation |
+| Interface | URL | Email | Mot de passe |
+|-----------|-----|-------|--------------|
+| Platform Admin | `/platform/login` | `platform@sos.local` | `PlatformAdmin123!` |
+| Application | `/login` | Creer via code d'invitation | - |
+
+**Important:** Les identifiants sont generes automatiquement lors de l'installation. Consultez:
+- Le fichier `CREDENTIALS.txt` (genere par deploy.sh)
+- Ou le fichier `.env` pour les valeurs configurees
+
+### Commandes utiles (Makefile)
+
+```bash
+make help           # Afficher toutes les commandes disponibles
+make start          # Demarrer les services
+make stop           # Arreter les services
+make restart        # Redemarrer les services
+make logs           # Voir les logs en temps reel
+make status         # Statut des services
+make backup         # Effectuer un backup manuel
+make restore BACKUP=<fichier>  # Restaurer un backup
+make health         # Verifier la sante des services
+make update         # Mettre a jour l'application
+make shell-db       # Console PostgreSQL
+make shell-backend  # Console bash backend
+```
+
+### Structure des scripts de deploiement
+
+```
+deploy/
+├── deploy.sh       # Deploiement complet sur serveur vierge
+├── backup.sh       # Script de backup automatique
+├── restore.sh      # Script de restauration
+└── quick-start.sh  # Installation one-liner
+```
 
 ---
 
 ## Configuration
 
-### Variables d'environnement
+### Variables d'environnement principales
 
 ```env
-# Base de donnees
-POSTGRES_HOST=postgres
-POSTGRES_PORT=5432
-POSTGRES_USER=sos
-POSTGRES_PASSWORD=votre_mot_de_passe
-POSTGRES_DB=sos
+# Environnement
+NODE_ENV=production
+DOMAIN=localhost
 
-# JWT
-JWT_SECRET=votre_secret_jwt_securise
-JWT_EXPIRES_IN=24h
+# Ports
+FRONTEND_PORT=3000
+BACKEND_PORT=3001
+DB_PORT=5432
+
+# Base de donnees
+DB_HOST=postgres
+DB_NAME=sos_db
+DB_USER=sos_user
+DB_PASSWORD=mot_de_passe_securise
+
+# JWT (generes automatiquement par install.sh)
+JWT_SECRET=secret_jwt_64_caracteres
+JWT_REFRESH_SECRET=secret_refresh_64_caracteres
+PLATFORM_JWT_SECRET=secret_platform_64_caracteres
+JWT_EXPIRES_IN=15m
 JWT_REFRESH_EXPIRES_IN=7d
 
-# Application
-NODE_ENV=production
-FRONTEND_URL=http://localhost:3000
-PORT=3001
+# Admin Entreprise
+DEFAULT_ADMIN_EMAIL=admin@example.com
+DEFAULT_ADMIN_PASSWORD=MotDePasseSecurise!
+
+# Admin Plateforme (SaaS)
+DEFAULT_PLATFORM_ADMIN_EMAIL=platform@example.com
+DEFAULT_PLATFORM_ADMIN_PASSWORD=MotDePassePlateforme!
+
+# URLs
+FRONTEND_URL=https://sos.example.com
+VITE_API_URL=/api
+
+# SSL
+ENABLE_SSL=true
+SSL_EMAIL=admin@example.com
+
+# SMTP (pour notifications email)
+SMTP_HOST=smtp.example.com
+SMTP_PORT=587
+SMTP_USER=noreply@example.com
+SMTP_PASS=mot_de_passe_smtp
+EMAIL_FROM=noreply@example.com
+EMAIL_FROM_NAME=SOS
+
+# Securite
+BCRYPT_ROUNDS=12
+RATE_LIMIT_WINDOW_MS=900000
+RATE_LIMIT_MAX_REQUESTS=100
+
+# WebSocket
+WS_ENABLED=true
+WS_HEARTBEAT_INTERVAL=30000
+
+# Backups
+BACKUP_DIR=./backups
+RETENTION_DAYS=30
 ```
 
 ---

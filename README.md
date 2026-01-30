@@ -1,75 +1,99 @@
 # SOS - Short Operational Summary
 
-Systeme de gestion des incidents et tickets operationnels avec workflow de validation hierarchique pour STEF.
+Systeme de gestion des incidents et tickets operationnels avec workflow de validation hierarchique - Architecture SaaS Multi-Tenant.
 
 ## Table des matieres
 
 1. [Vue d'ensemble](#vue-densemble)
-2. [Architecture hierarchique](#architecture-hierarchique)
+2. [Architecture SaaS Multi-Tenant](#architecture-saas-multi-tenant)
 3. [Roles et permissions](#roles-et-permissions)
-4. [Interfaces par role](#interfaces-par-role)
-5. [Workflow des tickets](#workflow-des-tickets)
-6. [Installation](#installation)
-7. [Configuration](#configuration)
-8. [API Reference](#api-reference)
+4. [Interfaces Plateforme Admin](#interfaces-plateforme-admin)
+5. [Interfaces Entreprise](#interfaces-entreprise)
+6. [Workflow des tickets](#workflow-des-tickets)
+7. [Fonctionnalites avancees](#fonctionnalites-avancees)
+8. [Installation](#installation)
+9. [Configuration](#configuration)
+10. [API Reference](#api-reference)
 
 ---
 
 ## Vue d'ensemble
 
-SOS est un systeme de ticketing concu pour gerer les incidents operationnels dans un environnement multi-sites avec une hierarchie a plusieurs niveaux.
+SOS est une plateforme SaaS de ticketing concue pour gerer les incidents operationnels dans un environnement multi-entreprises et multi-sites avec une hierarchie a plusieurs niveaux.
 
 ### Caracteristiques principales
 
-- **Multi-agences** : Chaque site a sa propre configuration
+- **Architecture SaaS** : Multi-tenant avec isolation des donnees par entreprise
+- **Multi-agences** : Chaque entreprise peut gerer plusieurs sites
 - **Double branche hierarchique** : Terrain et Administratif
 - **Workflow de validation** : Les tickets remontent dans la hierarchie
 - **Commentaires confidentiels** : Visibilite basee sur le niveau
 - **SLA automatiques** : Calcul selon urgence et blocage
 - **Vue syndicat** : Acces anonymise aux statistiques
+- **PWA** : Application installable sur mobile
+- **Notifications temps reel** : WebSocket pour alertes instantanees
+- **Analytics avances** : Tableaux de bord et KPIs
 
 ---
 
-## Architecture hierarchique
+## Architecture SaaS Multi-Tenant
 
-### Les deux branches
+### Hierarchie de la plateforme
 
 ```
-                     DIRECTION
-                         |
-        +----------------+----------------+
-        |                                 |
-    TERRAIN                          ADMINISTRATIF
-        |                                 |
-   +----+----+                      +-----+-----+
-   |         |                      |           |
- Niv 2    Niv 2                   Niv 2      Niv 2
-   |         |                      |           |
- Niv 1    Niv 1                   Niv 1      Niv 1
-   |         |                      |           |
- Niv 0    Niv 0                   Niv 0      Niv 0
+┌─────────────────────────────────────────────────────────────────┐
+│                    PLATEFORME SOS                               │
+│  (Super Admins - Gestion globale)                               │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  ┌─────────────┐  ┌─────────────┐  ┌─────────────┐             │
+│  │ ENTREPRISE 1│  │ ENTREPRISE 2│  │ ENTREPRISE 3│  ...        │
+│  │  (Tenant)   │  │  (Tenant)   │  │  (Tenant)   │             │
+│  ├─────────────┤  ├─────────────┤  ├─────────────┤             │
+│  │ - Site A    │  │ - Site X    │  │ - Site P    │             │
+│  │ - Site B    │  │ - Site Y    │  │ - Site Q    │             │
+│  │ - Site C    │  │             │  │             │             │
+│  └─────────────┘  └─────────────┘  └─────────────┘             │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
-### Niveaux hierarchiques types
+### Systeme de codes d'invitation
 
-| Niveau | Terrain | Administratif |
-|--------|---------|---------------|
-| 0 | Operateur, Cariste, Manutentionnaire | Employe bureau, Secretaire |
-| 1 | Chef d'equipe, Team Leader | Responsable RH, Comptable senior |
-| 2 | Responsable de quai, Chef de secteur | Directeur administratif |
-| 3 | Directeur de site | Directeur de site |
+| Type de code | Utilisation | Cree par |
+|--------------|-------------|----------|
+| `REG-XXXXXXXX` | Inscription nouvelle entreprise | Super Admin Plateforme |
+| `ADM-XXXXXXXX` | Invitation administrateur entreprise | Super Admin ou Admin entreprise |
+| `USR-XXXXXXXX` | Invitation utilisateur | Admin entreprise |
 
-### Separation des branches
+### Plans d'abonnement
 
-- Un ticket cree par un **Niveau 0 Terrain** n'est visible que par les **Niveaux 1+ Terrain**
-- Un ticket cree par un **Niveau 0 Administratif** n'est visible que par les **Niveaux 1+ Administratif**
-- Les utilisateurs avec **les deux profils** voient les deux branches
+| Plan | Sites max | Utilisateurs max | Admins max | Stockage |
+|------|-----------|------------------|------------|----------|
+| Starter | 5 | 50 | 3 | 5 Go |
+| Professional | 15 | 200 | 10 | 20 Go |
+| Enterprise | 50 | 1000 | 50 | 100 Go |
+| Unlimited | Illimite | Illimite | Illimite | Illimite |
 
 ---
 
 ## Roles et permissions
 
-### Matrice des permissions
+### Niveaux de la plateforme
+
+| Niveau | Role | Acces |
+|--------|------|-------|
+| Plateforme | Super Admin | Toutes les entreprises, configuration globale |
+| Plateforme | Admin | Gestion entreprises, lecture seule |
+| Plateforme | Viewer | Consultation statistiques globales |
+| Entreprise | Admin | Configuration complete de l'entreprise |
+| Entreprise | Admin Delegue | Gestion utilisateurs et sites |
+| Site | Niveau 3 | Direction du site |
+| Site | Niveau 2 | Responsable de zone |
+| Site | Niveau 1 | Chef d'equipe |
+| Site | Niveau 0 | Operateur |
+
+### Matrice des permissions par niveau
 
 | Permission | Niv 0 | Niv 1 | Niv 2 | Niv 3 | Admin |
 |------------|-------|-------|-------|-------|-------|
@@ -79,456 +103,717 @@ SOS est un systeme de ticketing concu pour gerer les incidents operationnels dan
 | Voir tous tickets site | ❌ | ❌ | ✅ | ✅ | ✅ |
 | Valider tickets | ❌ | ✅ | ✅ | ✅ | ✅ |
 | Escalader tickets | ❌ | ✅ | ✅ | ✅ | ✅ |
-| Resoudre tickets | ✅ | ✅ | ✅ | ✅ | ✅ |
-| Modifier urgence | ❌ | ✅ | ✅ | ✅ | ✅ |
-| Commentaires confidentiels | ❌ | Selon groupe | Selon groupe | ✅ | ✅ |
-| Visibilite syndicat | ❌ | ❌ | ✅ | ✅ | ✅ |
 | Dashboard equipe | ❌ | ✅ | ✅ | ✅ | ✅ |
 | Dashboard site | ❌ | ❌ | ✅ | ✅ | ✅ |
+| Analytics avances | ❌ | ❌ | ✅ | ✅ | ✅ |
 | Dashboard direction | ❌ | ❌ | ❌ | ✅ | ✅ |
 | Dashboard multi-sites | ❌ | ❌ | ❌ | ❌ | ✅ |
 | Gestion utilisateurs | ❌ | ❌ | ❌ | ❌ | ✅ |
-| Configuration agence | ❌ | ❌ | ❌ | ❌ | ✅ |
-
-### Types de profils
-
-| Profil | Description | Acces |
-|--------|-------------|-------|
-| `terrain` | Operations, production, logistique | Tickets terrain uniquement |
-| `administratif` | Bureau, RH, comptabilite | Tickets admin uniquement |
-| `terrain + administratif` | Managers transverses | Les deux branches |
 
 ---
 
-## Interfaces par role
+## Interfaces Plateforme Admin
 
-### 1. Connexion (tous)
+### 1. Connexion Plateforme Admin
 
-```
-┌─────────────────────────────────────────────────────────────┐
-│                                                             │
-│                         SOS                                 │
-│                Short Operational Summary                    │
-│                                                             │
-│  ┌─────────────────────────────────────────────────────┐   │
-│  │  Email                                              │   │
-│  │  ┌───────────────────────────────────────────────┐  │   │
-│  │  │ jean.dupont@stef.com                          │  │   │
-│  │  └───────────────────────────────────────────────┘  │   │
-│  │                                                     │   │
-│  │  Mot de passe                                       │   │
-│  │  ┌───────────────────────────────────────────────┐  │   │
-│  │  │ ••••••••••••                                  │  │   │
-│  │  └───────────────────────────────────────────────┘  │   │
-│  │                                                     │   │
-│  │  [        SE CONNECTER        ]                     │   │
-│  │                                                     │   │
-│  │  Mot de passe oublie ?    Demander un compte        │   │
-│  └─────────────────────────────────────────────────────┘   │
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
-```
-
-### 2. Selection du site (multi-sites)
+**URL:** `/platform/login`
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│  SOS           [Menu]                    Jean D. ▼          │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│  Selectionnez votre site de travail                         │
-│                                                             │
-│  ┌─────────────────────────────────────────────────────┐   │
-│  │  🏭 STEF Rungis                                     │   │
-│  │     Chef d'equipe - Terrain                         │   │
-│  │     12 tickets en attente                           │   │
-│  └─────────────────────────────────────────────────────┘   │
-│                                                             │
-│  ┌─────────────────────────────────────────────────────┐   │
-│  │  🏭 STEF Lyon                                       │   │
-│  │     Operateur - Terrain                             │   │
-│  │     2 tickets en attente                            │   │
-│  └─────────────────────────────────────────────────────┘   │
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│                                                                 │
+│                    ┌──────────────┐                             │
+│                    │    🛡️        │                             │
+│                    └──────────────┘                             │
+│                                                                 │
+│                    SOS Platform                                 │
+│                Administration de la plateforme                  │
+│                                                                 │
+│   ┌─────────────────────────────────────────────────────────┐  │
+│   │                                                         │  │
+│   │  📧 Email                                               │  │
+│   │  ┌───────────────────────────────────────────────────┐  │  │
+│   │  │ platform@sos.local                                │  │  │
+│   │  └───────────────────────────────────────────────────┘  │  │
+│   │                                                         │  │
+│   │  🔒 Mot de passe                                        │  │
+│   │  ┌───────────────────────────────────────────────────┐  │  │
+│   │  │ ••••••••••••                                      │  │  │
+│   │  └───────────────────────────────────────────────────┘  │  │
+│   │                                                         │  │
+│   │         [🛡️ SE CONNECTER]                               │  │
+│   │                                                         │  │
+│   └─────────────────────────────────────────────────────────┘  │
+│                                                                 │
+│           Acces reserve aux administrateurs plateforme          │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
-### 3. Dashboard Personnel (Niveau 0)
+**Identifiants par defaut:**
+- Email: `platform@sos.local`
+- Mot de passe: `PlatformAdmin123!`
+
+### 2. Dashboard Plateforme
+
+**URL:** `/platform/dashboard`
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│  SOS    STEF Rungis                      Jean Dupont ▼      │
-│  [Dashboard] [Tickets] [+ Nouveau]       Operateur          │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│  Bonjour Jean ! Voici vos tickets.                          │
-│                                                             │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐    │
-│  │    3     │  │    1     │  │    2     │  │    5     │    │
-│  │ En cours │  │ Critique │  │ En retard│  │ Ce mois  │    │
-│  └──────────┘  └──────────┘  └──────────┘  └──────────┘    │
-│                                                             │
-│  MES TICKETS RECENTS                                        │
-│  ┌─────────────────────────────────────────────────────┐   │
-│  │ ⚠️ TKT-0042  Temperature chambre froide    [HAUTE]  │   │
-│  │    En attente validation • Cree il y a 2h           │   │
-│  ├─────────────────────────────────────────────────────┤   │
-│  │ 🔧 TKT-0038  Chariot en panne             [MOYENNE] │   │
-│  │    En cours • Assigne a M. Martin                   │   │
-│  ├─────────────────────────────────────────────────────┤   │
-│  │ ✅ TKT-0035  Eclairage zone B             [BASSE]   │   │
-│  │    Resolu • Cloture le 25/01                        │   │
-│  └─────────────────────────────────────────────────────┘   │
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│ 🛡️ SOS Platform      │ Dashboard │ Entreprises │ Codes │ Admins │
+├──────────────────────┴────────────────────────────────────────┤
+│                                                                 │
+│  Dashboard Plateforme                    [Systeme OK ✅ 2ms]    │
+│  Vue d'ensemble de la plateforme SOS                            │
+│                                                                 │
+│  ┌────────────┐  ┌────────────┐  ┌────────────┐  ┌────────────┐│
+│  │     12     │  │     45     │  │    234     │  │   1,847    ││
+│  │ Entreprises│  │   Sites    │  │Utilisateurs│  │  Tickets   ││
+│  │ 10 actives │  │   actifs   │  │ 15 admins  │  │ 127 (24h)  ││
+│  └────────────┘  └────────────┘  └────────────┘  └────────────┘│
+│                                                                 │
+│  ┌─────────────────────────────┐ ┌─────────────────────────────┐│
+│  │ ⚠️ ALERTES                  │ │ 📈 ENTREPRISES RECENTES     ││
+│  │                             │ │                             ││
+│  │ 🟡 TechCorp - Trial expire  │ │ 🏢 LogiTrans      [actif]  ││
+│  │    dans 3 jours             │ │    5 sites, 45 utilisateurs ││
+│  │ 🔴 DataCo - Limite sites    │ │                             ││
+│  │    atteinte (5/5)           │ │ 🏢 FreshFood      [trial]  ││
+│  │                             │ │    2 sites, 12 utilisateurs ││
+│  └─────────────────────────────┘ └─────────────────────────────┘│
+│                                                                 │
+│  ┌─────────────────────────────┐ ┌─────────────────────────────┐│
+│  │ 🔥 TOP ACTIVES (7j)         │ │ 📋 ACTIVITE RECENTE         ││
+│  │                             │ │                             ││
+│  │ 1. STEF Logistics  89 tkts  │ │ Admin P. - company_created  ││
+│  │ 2. TransCold       67 tkts  │ │   LogiTrans - il y a 2h     ││
+│  │ 3. FreshChain      45 tkts  │ │                             ││
+│  │                             │ │ Admin P. - invitation_sent  ││
+│  │                             │ │   ADM-X8K2P - il y a 3h     ││
+│  └─────────────────────────────┘ └─────────────────────────────┘│
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
-### 4. Dashboard Equipe (Niveau 1+)
+### 3. Gestion des Entreprises
+
+**URL:** `/platform/companies`
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│  SOS    STEF Rungis                      Marie Martin ▼     │
-│  [Dashboard] [Equipe] [Tickets] [+ Nouveau]  Chef d'equipe  │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│  Dashboard Equipe - Terrain                                 │
-│                                                             │
-│  ⚠️ 5 TICKETS EN ATTENTE DE VALIDATION                      │
-│                                                             │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐    │
-│  │   12     │  │    3     │  │   89%    │  │   2.4h   │    │
-│  │ En cours │  │Critiques │  │ SLA OK   │  │Temps moy.│    │
-│  └──────────┘  └──────────┘  └──────────┘  └──────────┘    │
-│                                                             │
-│  A VALIDER                                                  │
-│  ┌─────────────────────────────────────────────────────┐   │
-│  │ ⚠️ TKT-0042  Jean Dupont (Operateur)                │   │
-│  │    Temperature chambre froide • Propose: HAUTE      │   │
-│  │    [Valider] [Voir]                                 │   │
-│  ├─────────────────────────────────────────────────────┤   │
-│  │ ⚠️ TKT-0043  Paul Bernard (Cariste)                 │   │
-│  │    Transpalette defectueux • Propose: MOYENNE       │   │
-│  │    [Valider] [Voir]                                 │   │
-│  └─────────────────────────────────────────────────────┘   │
-│                                                             │
-│  PERFORMANCE EQUIPE                                         │
-│  ┌─────────────────────────────────────────────────────┐   │
-│  │  [Graphique: tickets resolus par jour]              │   │
-│  └─────────────────────────────────────────────────────┘   │
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│ 🛡️ SOS Platform                                                 │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  Entreprises                        [+ Nouvelle entreprise]     │
+│  12 entreprises au total                                        │
+│                                                                 │
+│  ┌─────────────────────────────────────────────────────────────┐│
+│  │ 🔍 Rechercher...  │ Statut ▼ │ Plan ▼ │  [Rechercher]       ││
+│  └─────────────────────────────────────────────────────────────┘│
+│                                                                 │
+│  ┌─────────────────────────────────────────────────────────────┐│
+│  │ Entreprise      │ Plan    │ Statut │Sites│Users│Tkts│Actions││
+│  ├─────────────────┼─────────┼────────┼─────┼─────┼────┼───────┤│
+│  │ 🏢 STEF Logist. │ Enterpr.│ ✅actif│ 8/50│120/ │847 │ ⋮     ││
+│  │    stef         │         │        │     │1000 │    │       ││
+│  ├─────────────────┼─────────┼────────┼─────┼─────┼────┼───────┤│
+│  │ 🏢 TransCold    │ Profes. │ ✅actif│ 5/15│ 45/ │234 │ ⋮     ││
+│  │    transcold    │         │        │     │ 200 │    │       ││
+│  ├─────────────────┼─────────┼────────┼─────┼─────┼────┼───────┤│
+│  │ 🏢 FreshFood    │ Starter │ 🔵trial│ 2/5 │ 12/ │ 45 │ ⋮     ││
+│  │    freshfood    │         │ 27j    │     │  50 │    │       ││
+│  └─────────────────────────────────────────────────────────────┘│
+│                                                                 │
+│  ◀ Page 1 sur 2 ▶                                               │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
-### 5. Dashboard Site (Niveau 2+)
+### 4. Modal Creation Entreprise
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│  SOS    STEF Rungis                    Pierre Durand ▼      │
-│  [Dashboard] [Site] [Equipes] [Tickets]  Resp. de site      │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│  Vue Site - STEF Rungis                                     │
-│                                                             │
-│  ┌───────────────────┐  ┌───────────────────┐              │
-│  │ TERRAIN           │  │ ADMINISTRATIF     │              │
-│  │ 45 tickets actifs │  │ 12 tickets actifs │              │
-│  │ 92% SLA OK        │  │ 98% SLA OK        │              │
-│  └───────────────────┘  └───────────────────┘              │
-│                                                             │
-│  REPARTITION PAR TYPE                                       │
-│  ┌─────────────────────────────────────────────────────┐   │
-│  │  Froid/Temperature  ████████████████  35%           │   │
-│  │  Materiel           ████████████      25%           │   │
-│  │  Infrastructure     ████████          18%           │   │
-│  │  Securite           ██████            12%           │   │
-│  │  Autre              ████              10%           │   │
-│  └─────────────────────────────────────────────────────┘   │
-│                                                             │
-│  TICKETS CRITIQUES                                          │
-│  ┌─────────────────────────────────────────────────────┐   │
-│  │ 🔴 TKT-0042  Chambre froide - SLA dans 2h           │   │
-│  │ 🔴 TKT-0044  Quai 3 inaccessible - SLA depasse      │   │
-│  └─────────────────────────────────────────────────────┘   │
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│  Nouvelle entreprise                                      ✕     │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  Nom de l'entreprise *           Slug *                         │
+│  ┌─────────────────────────┐     ┌─────────────────────────┐   │
+│  │ Ma Nouvelle Entreprise  │     │ ma-nouvelle-entreprise  │   │
+│  └─────────────────────────┘     └─────────────────────────┘   │
+│                                                                 │
+│  Email contact *                 Telephone                      │
+│  ┌─────────────────────────┐     ┌─────────────────────────┐   │
+│  │ contact@entreprise.com  │     │ +33 1 23 45 67 89       │   │
+│  └─────────────────────────┘     └─────────────────────────┘   │
+│                                                                 │
+│  Nom du contact                                                 │
+│  ┌─────────────────────────────────────────────────────────┐   │
+│  │ Jean Dupont                                             │   │
+│  └─────────────────────────────────────────────────────────┘   │
+│                                                                 │
+│  Plan                            Jours d'essai                  │
+│  ┌─────────────────────────┐     ┌─────────────────────────┐   │
+│  │ Starter            ▼    │     │ 30                      │   │
+│  └─────────────────────────┘     └─────────────────────────┘   │
+│                                                                 │
+│  Max sites    Max utilisateurs   Max admins                     │
+│  ┌─────────┐  ┌─────────┐        ┌─────────┐                   │
+│  │    5    │  │   50    │        │    3    │                   │
+│  └─────────┘  └─────────┘        └─────────┘                   │
+│                                                                 │
+│                        [Annuler]  [Creer l'entreprise]          │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
-### 6. Dashboard Direction (Niveau 3)
+### 5. Gestion des Codes d'Invitation
+
+**URL:** `/platform/invitations`
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│  SOS    STEF Rungis                    Dir. Site ▼          │
-│  [Dashboard] [Direction] [Rapports] [Export]                │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│  Vue Direction - STEF Rungis                                │
-│                                                             │
-│  TENDANCES (30 derniers jours)                              │
-│  ┌─────────────────────────────────────────────────────┐   │
-│  │     ^                                               │   │
-│  │  30 │    ╱╲                                         │   │
-│  │  20 │   ╱  ╲    ╱╲                                  │   │
-│  │  10 │  ╱    ╲──╱  ╲──                               │   │
-│  │     └─────────────────────────────────────>         │   │
-│  │       Sem1   Sem2   Sem3   Sem4                     │   │
-│  └─────────────────────────────────────────────────────┘   │
-│                                                             │
-│  TOP 5 PROBLEMES (Pareto)                                   │
-│  ┌─────────────────────────────────────────────────────┐   │
-│  │ 1. Temperature        ████████████████████  42%     │   │
-│  │ 2. Materiel           ██████████████       28%      │   │
-│  │ 3. Infrastructure     ████████             15%      │   │
-│  │ 4. RH                 ████                  8%      │   │
-│  │ 5. Autre              ██                    7%      │   │
-│  │                                     Total: 100%     │   │
-│  └─────────────────────────────────────────────────────┘   │
-│                                                             │
-│  PERFORMANCE PAR RESPONSABLE                                │
-│  ┌─────────────────────────────────────────────────────┐   │
-│  │ M. Martin    ████████████ 95% SLA  │ 45 resolus    │   │
-│  │ P. Bernard   ██████████   88% SLA  │ 32 resolus    │   │
-│  │ L. Petit     █████████    85% SLA  │ 28 resolus    │   │
-│  └─────────────────────────────────────────────────────┘   │
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│ 🛡️ SOS Platform                                                 │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  Codes d'invitation                        [+ Nouveau code]     │
+│  48 codes au total                                              │
+│                                                                 │
+│  ┌─────────────────────────────────────────────────────────────┐│
+│  │ 🔍 Rechercher  │Entreprise ▼│ Type ▼ │Statut ▼│ [Filtrer]   ││
+│  └─────────────────────────────────────────────────────────────┘│
+│                                                                 │
+│  ┌─────────────────────────────────────────────────────────────┐│
+│  │ Code           │ Type       │ Entreprise │Util.│Stat│Actions││
+│  ├────────────────┼────────────┼────────────┼─────┼────┼───────┤│
+│  │ REG-A8K2P9X4   │ 🟣Entrep.  │ -          │ 0/1 │ ✅ │📋 👁 🗑││
+│  │                │            │            │     │    │       ││
+│  ├────────────────┼────────────┼────────────┼─────┼────┼───────┤│
+│  │ ADM-B7J3M6N2   │ 🔵Admin    │ STEF Log.  │ 1/1 │ ✅ │📋 👁 🗑││
+│  │                │            │            │     │    │       ││
+│  ├────────────────┼────────────┼────────────┼─────┼────┼───────┤│
+│  │ USR-C4K8P2Q5   │ 🟢User     │ TransCold  │ 3/10│ ✅ │📋 👁 🗑││
+│  │                │            │            │     │    │       ││
+│  └─────────────────────────────────────────────────────────────┘│
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
-### 7. Dashboard Multi-Sites (Admin)
+### 6. Gestion des Administrateurs Plateforme
+
+**URL:** `/platform/admins`
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│  SOS    Mode Admin                       Admin ▼            │
-│  [Sites] [Utilisateurs] [Configuration] [Logs]              │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│  Comparaison Multi-Sites                                    │
-│                                                             │
-│  ┌──────────────────┬────────┬─────────┬─────────┬───────┐ │
-│  │ Site             │Tickets │ SLA OK  │ Critiq. │ Trend │ │
-│  ├──────────────────┼────────┼─────────┼─────────┼───────┤ │
-│  │ STEF Rungis      │   127  │   92%   │    3    │  ↗️   │ │
-│  │ STEF Lyon        │    89  │   95%   │    1    │  →    │ │
-│  │ STEF Marseille   │   103  │   87%   │    5    │  ↘️   │ │
-│  │ STEF Bordeaux    │    65  │   98%   │    0    │  ↗️   │ │
-│  └──────────────────┴────────┴─────────┴─────────┴───────┘ │
-│                                                             │
-│  ALERTES                                                    │
-│  ┌─────────────────────────────────────────────────────┐   │
-│  │ 🔴 STEF Marseille: 5 tickets critiques non traites  │   │
-│  │ ⚠️ STEF Rungis: SLA en baisse (-3% cette semaine)   │   │
-│  └─────────────────────────────────────────────────────┘   │
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│ 🛡️ SOS Platform                                                 │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  Administrateurs                           [+ Nouvel admin]     │
+│  Gestion des administrateurs de la plateforme                   │
+│                                                                 │
+│  ┌─────────────────────────────────────────────────────────────┐│
+│  │ Admin                  │ Role       │ Statut │ Connexion    ││
+│  ├────────────────────────┼────────────┼────────┼──────────────┤│
+│  │ 👤 Platform Admin      │ 🟣Super    │ ✅Actif│ il y a 5min  ││
+│  │    platform@sos.local  │   Admin    │        │              ││
+│  ├────────────────────────┼────────────┼────────┼──────────────┤│
+│  │ 👤 Jean Martin         │ 🔵Admin    │ ✅Actif│ il y a 2h    ││
+│  │    jean@sos.local      │            │        │   ✏️ 🔑 🗑   ││
+│  ├────────────────────────┼────────────┼────────┼──────────────┤│
+│  │ 👤 Marie Durand        │ ⚪Viewer   │ ✅Actif│ Jamais       ││
+│  │    marie@sos.local     │            │        │   ✏️ 🔑 🗑   ││
+│  └─────────────────────────────────────────────────────────────┘│
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
-### 8. Creation de Ticket
+---
+
+## Interfaces Entreprise
+
+### 1. Page d'Inscription Entreprise
+
+**URL:** `/register`
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│  ← Retour                        Nouveau ticket             │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│  (Si double profil)                                         │
-│  ┌─────────────────────┐  ┌─────────────────────┐          │
-│  │ 🏭 TERRAIN          │  │ 🏢 ADMINISTRATIF    │          │
-│  │ Operations, prod.   │  │ Bureau, RH          │          │
-│  └─────────────────────┘  └─────────────────────┘          │
-│                                                             │
-│  INFORMATIONS DU PROBLEME                                   │
-│  ┌─────────────────────────────────────────────────────┐   │
-│  │ Titre *                                             │   │
-│  │ [Temperature anormale chambre froide 2            ] │   │
-│  │                                                     │   │
-│  │ Description *                                       │   │
-│  │ [La temperature est montee a -12°C au lieu de     ]│   │
-│  │ [-18°C. Alarme declenchee a 6h30.                 ]│   │
-│  │                                                     │   │
-│  │ Type de probleme *         Lieu                     │   │
-│  │ [Froid/Temperature ▼]      [Chambre froide 2 ▼]    │   │
-│  └─────────────────────────────────────────────────────┘   │
-│                                                             │
-│  NIVEAU D'URGENCE PROPOSE                                   │
-│  ┌───────────────┐ ┌───────────────┐                       │
-│  │ ○ Basse      │ │ ○ Moyenne     │                       │
-│  │   Impact min. │ │   Delais norm.│                       │
-│  └───────────────┘ └───────────────┘                       │
-│  ┌───────────────┐ ┌───────────────┐                       │
-│  │ ● Haute      │ │ ○ Critique    │                       │
-│  │   Prioritaire │ │   Urgent      │                       │
-│  └───────────────┘ └───────────────┘                       │
-│                                                             │
-│  IMPACT SUR L'ACTIVITE                                      │
-│  ○ Non bloquant   ● Partiel   ○ Bloquant                   │
-│                                                             │
-│                    [Annuler]  [Creer le ticket]            │
-└─────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│                                                                 │
+│                    ┌──────────────┐                             │
+│                    │    🏢        │                             │
+│                    └──────────────┘                             │
+│                                                                 │
+│                  Code d'invitation                              │
+│           Entrez votre code d'invitation                        │
+│                                                                 │
+│             ①━━━━━━━━━━━━━━━━━━○                                │
+│           Code              Formulaire                          │
+│                                                                 │
+│   ┌─────────────────────────────────────────────────────────┐  │
+│   │                                                         │  │
+│   │  🔑 Code d'invitation                                   │  │
+│   │  ┌───────────────────────────────────────────────────┐  │  │
+│   │  │ REG-A8K2P9X4                                      │  │  │
+│   │  └───────────────────────────────────────────────────┘  │  │
+│   │                                                         │  │
+│   │              [Valider le code ➡️]                        │  │
+│   │                                                         │  │
+│   └─────────────────────────────────────────────────────────┘  │
+│                                                                 │
+│           Deja un compte ? Se connecter                         │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
-### 9. Detail Ticket (Vue Validateur)
+### 2. Formulaire Creation Entreprise (Etape 2)
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│  ← Retour   TKT-0042                    [En attente] [Haute]│
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│  ┌─────────────────────────────────────────────────────┐   │
-│  │ ⚠️ Ce ticket attend votre validation                │   │
-│  │    (En charge: Chef d'equipe)                       │   │
-│  └─────────────────────────────────────────────────────┘   │
-│                                                             │
-│  ┌─────────────────────────────────────────────────────┐   │
-│  │ ⚠️ ACTION REQUISE                        [Traiter]  │   │
-│  └─────────────────────────────────────────────────────┘   │
-│                                                             │
-│  [Details] [Historique (3)]                                 │
-│                                                             │
-│  DESCRIPTION                                                │
-│  Temperature chambre froide montee a -12°C au lieu de      │
-│  -18°C requis. Alarme declenchee a 6h30.                   │
-│                                                             │
-│  ┌────────────────────┐  ┌──────────────────────────────┐  │
-│  │ INFORMATIONS       │  │ COMMENTAIRES (2)             │  │
-│  │                    │  │                              │  │
-│  │ Type: Froid        │  │ 👤 Jean Dupont (Operateur)   │  │
-│  │ Lieu: CF 2         │  │    07:15 - Alarme sonnait    │  │
-│  │                    │  │    deja a mon arrivee.       │  │
-│  │ Cree par:          │  │                              │  │
-│  │ Jean Dupont        │  │ 👤 Moi (Chef d'equipe)       │  │
-│  │ Operateur          │  │    08:30 - Technicien        │  │
-│  │                    │  │    contacte.                 │  │
-│  │ Cree le:           │  │                              │  │
-│  │ 27/01 07:15        │  │ 🔒 [Note confidentielle]     │  │
-│  └────────────────────┘  │    Direction uniquement      │  │
-│                          └──────────────────────────────┘  │
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│                                                                 │
+│                  Creer votre entreprise                         │
+│       Configurez votre entreprise et compte administrateur      │
+│                                                                 │
+│             ●━━━━━━━━━━━━━━━━━━●                                │
+│           Code              Formulaire                          │
+│                                                                 │
+│   ═══════════════ INFORMATIONS ENTREPRISE ═══════════════      │
+│                                                                 │
+│   Nom de l'entreprise *          Identifiant (slug) *           │
+│   ┌─────────────────────────┐    ┌─────────────────────────┐   │
+│   │ STEF Logistics          │    │ stef-logistics          │   │
+│   └─────────────────────────┘    └─────────────────────────┘   │
+│                                                                 │
+│   Adresse                        Ville                          │
+│   ┌─────────────────────────┐    ┌─────────────────────────┐   │
+│   │ 123 rue du Froid        │    │ Paris                   │   │
+│   └─────────────────────────┘    └─────────────────────────┘   │
+│                                                                 │
+│   ═══════════════ COMPTE ADMINISTRATEUR ═══════════════        │
+│                                                                 │
+│   Prenom *                       Nom *                          │
+│   ┌─────────────────────────┐    ┌─────────────────────────┐   │
+│   │ Jean                    │    │ Dupont                  │   │
+│   └─────────────────────────┘    └─────────────────────────┘   │
+│                                                                 │
+│   Email *                        Telephone                      │
+│   ┌─────────────────────────┐    ┌─────────────────────────┐   │
+│   │ jean@stef.com           │    │ +33 6 12 34 56 78       │   │
+│   └─────────────────────────┘    └─────────────────────────┘   │
+│                                                                 │
+│   Mot de passe *                 Confirmer *                    │
+│   ┌─────────────────────────┐    ┌─────────────────────────┐   │
+│   │ ••••••••••••            │    │ ••••••••••••            │   │
+│   └─────────────────────────┘    └─────────────────────────┘   │
+│                                                                 │
+│         [⬅️ Retour]              [Creer mon compte ✅]          │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
-### 10. Panel de Validation
+### 3. Connexion Utilisateur
+
+**URL:** `/login`
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│  ACTIONS SUR LE TICKET                                      │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│  EVALUER L'URGENCE                                          │
-│  ┌─────────────────────────────────────────────────────┐   │
-│  │  Niveau d'urgence      Niveau de blocage            │   │
-│  │  [Haute ▼]             [Partiel ▼]                  │   │
-│  │  ⚠️ Propose: Haute                                   │   │
-│  │                                                     │   │
-│  │  Justification (si modifie):                        │   │
-│  │  [                                                ] │   │
-│  └─────────────────────────────────────────────────────┘   │
-│                                                             │
-│  CHOISIR UNE ACTION                                         │
-│  ┌─────────────────────────────────────────────────────┐   │
-│  │  ● ▶️ Prendre en charge                              │   │
-│  │       Je m'occupe de ce ticket                      │   │
-│  │                                                     │   │
-│  │  ○ ⬆️ Escalader                                      │   │
-│  │       Remonter au niveau superieur                  │   │
-│  │       [Raison de l'escalade...]                     │   │
-│  │                                                     │   │
-│  │  ○ ⬇️ Retourner                                      │   │
-│  │       Renvoyer au createur pour plus d'infos        │   │
-│  │       [Information manquante...]                    │   │
-│  │                                                     │   │
-│  │  ○ ✅ Resoudre                                       │   │
-│  │       Marquer comme resolu                          │   │
-│  │       [Type: Resolu ▼]                              │   │
-│  │       [Description de la resolution...]             │   │
-│  └─────────────────────────────────────────────────────┘   │
-│                                                             │
-│                         [Annuler]  [Confirmer]             │
-└─────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│                                                                 │
+│                    ┌──────────────┐                             │
+│                    │    SOS       │                             │
+│                    └──────────────┘                             │
+│                Short Operational Summary                        │
+│                                                                 │
+│   ┌─────────────────────────────────────────────────────────┐  │
+│   │                                                         │  │
+│   │  📧 Email                                               │  │
+│   │  ┌───────────────────────────────────────────────────┐  │  │
+│   │  │ jean.dupont@stef.com                              │  │  │
+│   │  └───────────────────────────────────────────────────┘  │  │
+│   │                                                         │  │
+│   │  🔒 Mot de passe                                        │  │
+│   │  ┌───────────────────────────────────────────────────┐  │  │
+│   │  │ ••••••••••••                                      │  │  │
+│   │  └───────────────────────────────────────────────────┘  │  │
+│   │                                                         │  │
+│   │         [SE CONNECTER]                                  │  │
+│   │                                                         │  │
+│   │  Mot de passe oublie ?         Creer un compte          │  │
+│   │                                                         │  │
+│   └─────────────────────────────────────────────────────────┘  │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
-### 11. Vue Syndicat
+### 4. Dashboard Personnel (Niveau 0)
+
+**URL:** `/`
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│  SOS - Vue Syndicat                    Rep. Syndical ▼      │
-│  [Dashboard] [Tickets] [Statistiques]                       │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│  Statistiques Syndicales - STEF Rungis                      │
-│                                                             │
-│  ⚠️ Cette vue anonymise les donnees personnelles            │
-│                                                             │
-│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐    │
-│  │   127    │  │   89%    │  │    8     │  │   4.2    │    │
-│  │ Tickets  │  │ SLA OK   │  │Critiques │  │ Jours moy│    │
-│  │ ce mois  │  │          │  │ ce mois  │  │resolution│    │
-│  └──────────┘  └──────────┘  └──────────┘  └──────────┘    │
-│                                                             │
-│  TYPES DE PROBLEMES LES PLUS FREQUENTS                      │
-│  ┌─────────────────────────────────────────────────────┐   │
-│  │  Temperature/Froid  ████████████████  35%           │   │
-│  │  Materiel           ████████████      25%           │   │
-│  │  Securite           ████████          18%           │   │
-│  └─────────────────────────────────────────────────────┘   │
-│                                                             │
-│  TICKETS VISIBLES (donnees anonymisees)                     │
-│  ┌─────────────────────────────────────────────────────┐   │
-│  │ TKT-0042  Temperature chambre froide    [En cours]  │   │
-│  │           Type: Froid • SLA: OK • Anciennete: 2j    │   │
-│  ├─────────────────────────────────────────────────────┤   │
-│  │ TKT-0038  Equipement de securite        [Resolu]    │   │
-│  │           Type: Securite • SLA: OK • Resolu en 1j   │   │
-│  └─────────────────────────────────────────────────────┘   │
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│  SOS   │ STEF Rungis ▼ │                    🔔(3)  Jean D. ▼   │
+│  [Dashboard] [Tickets] [Notifications] [Profil]                 │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  Bonjour Jean ! Voici vos tickets.       [+ Nouveau ticket]     │
+│                                                                 │
+│  ┌────────────┐  ┌────────────┐  ┌────────────┐  ┌────────────┐│
+│  │     3      │  │     1      │  │     2      │  │     5      ││
+│  │  En cours  │  │ 🔴Critique │  │ ⚠️En retard│  │  Ce mois   ││
+│  └────────────┘  └────────────┘  └────────────┘  └────────────┘│
+│                                                                 │
+│  MES TICKETS RECENTS                                            │
+│  ┌─────────────────────────────────────────────────────────────┐│
+│  │ ⚠️ #0042  Temperature chambre froide          [HAUTE]       ││
+│  │           En attente validation • Cree il y a 2h            ││
+│  ├─────────────────────────────────────────────────────────────┤│
+│  │ 🔧 #0038  Chariot elevateur en panne          [MOYENNE]     ││
+│  │           En cours • Assigne a M. Martin                    ││
+│  ├─────────────────────────────────────────────────────────────┤│
+│  │ ✅ #0035  Eclairage zone B defaillant         [BASSE]       ││
+│  │           Resolu • Cloture le 25/01                         ││
+│  └─────────────────────────────────────────────────────────────┘│
+│                                                                 │
+│                          Voir tous les tickets →                │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
 ```
 
-### 12. Administration (Admin)
+### 5. Dashboard Equipe (Niveau 1+)
 
 ```
-┌─────────────────────────────────────────────────────────────┐
-│  SOS - Administration                    Admin ▼            │
-│  [Agences] [Utilisateurs] [Demandes] [Logs]                 │
-├─────────────────────────────────────────────────────────────┤
-│                                                             │
-│  Configuration - STEF Rungis                                │
-│                                                             │
-│  [Niveaux] [Types] [Lieux] [SLA] [Groupes confidentiels]   │
-│                                                             │
-│  NIVEAUX HIERARCHIQUES                                      │
-│  ┌─────────────────────────────────────────────────────┐   │
-│  │ Niv │ Terrain           │ Administratif             │   │
-│  ├─────┼───────────────────┼───────────────────────────┤   │
-│  │  0  │ Operateur         │ Employe bureau            │   │
-│  │  1  │ Chef d'equipe     │ Responsable RH            │   │
-│  │  2  │ Resp. de quai     │ Directeur admin           │   │
-│  │  3  │ Directeur site    │ Directeur site            │   │
-│  └─────────────────────────────────────────────────────┘   │
-│  [+ Ajouter niveau]                                        │
-│                                                             │
-│  TYPES DE PROBLEMES                                         │
-│  ┌─────────────────────────────────────────────────────┐   │
-│  │ Nom                  │ Niveau min │ Actif │ Actions │   │
-│  ├──────────────────────┼────────────┼───────┼─────────┤   │
-│  │ Temperature/Froid    │     0      │  ✅   │ [Edit]  │   │
-│  │ Materiel             │     0      │  ✅   │ [Edit]  │   │
-│  │ Demande RH           │     1      │  ✅   │ [Edit]  │   │
-│  │ Audit qualite        │     2      │  ✅   │ [Edit]  │   │
-│  └─────────────────────────────────────────────────────┘   │
-│  [+ Ajouter type]                                          │
-│                                                             │
-└─────────────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────────────┐
+│  SOS   │ STEF Rungis ▼ │                    🔔(5)  Marie M. ▼  │
+│  [Personnel] [Equipe] [Site] [Analytics]    Chef d'equipe       │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  Dashboard Equipe - Terrain                                     │
+│                                                                 │
+│  ⚠️ 5 TICKETS EN ATTENTE DE VALIDATION                          │
+│                                                                 │
+│  ┌────────────┐  ┌────────────┐  ┌────────────┐  ┌────────────┐│
+│  │    12      │  │     3      │  │    89%     │  │   2.4h     ││
+│  │  En cours  │  │ Critiques  │  │  SLA OK    │  │ Temps moy. ││
+│  └────────────┘  └────────────┘  └────────────┘  └────────────┘│
+│                                                                 │
+│  A VALIDER                                                      │
+│  ┌─────────────────────────────────────────────────────────────┐│
+│  │ ⚠️ #0042  Jean Dupont (Operateur)                           ││
+│  │           Temperature chambre froide • Propose: HAUTE       ││
+│  │                              [Valider] [Modifier] [Voir]    ││
+│  ├─────────────────────────────────────────────────────────────┤│
+│  │ ⚠️ #0043  Paul Bernard (Cariste)                            ││
+│  │           Transpalette defectueux • Propose: MOYENNE        ││
+│  │                              [Valider] [Modifier] [Voir]    ││
+│  └─────────────────────────────────────────────────────────────┘│
+│                                                                 │
+│  PERFORMANCE EQUIPE                                             │
+│  ┌─────────────────────────────────────────────────────────────┐│
+│  │ 📊 [Graphique: Tickets resolus par jour - 7 derniers jours] ││
+│  └─────────────────────────────────────────────────────────────┘│
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### 6. Analytics Avances (Niveau 2+)
+
+**URL:** `/analytics`
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  SOS   │ STEF Rungis ▼ │                        Pierre D. ▼    │
+│  [Dashboard] [Tickets] [Analytics]              Resp. site      │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  Analytics                          Periode: [30 jours ▼]       │
+│                                                                 │
+│  ┌────────────┐  ┌────────────┐  ┌────────────┐  ┌────────────┐│
+│  │    127     │  │   4.2h     │  │    92%     │  │   +15%     ││
+│  │  Tickets   │  │ Resolution │  │  SLA OK    │  │ vs periode ││
+│  │  crees     │  │  moyenne   │  │            │  │ precedente ││
+│  └────────────┘  └────────────┘  └────────────┘  └────────────┘│
+│                                                                 │
+│  ┌─────────────────────────────────────────────────────────────┐│
+│  │ TENDANCE JOURNALIERE                                        ││
+│  │                                                             ││
+│  │     ^                                                       ││
+│  │  15 │    ╱╲                                                 ││
+│  │  10 │   ╱  ╲    ╱╲    ╱╲                                    ││
+│  │   5 │  ╱    ╲──╱  ╲──╱  ╲──                                 ││
+│  │     └─────────────────────────────────────>                 ││
+│  │       L    M    M    J    V    S    D                       ││
+│  └─────────────────────────────────────────────────────────────┘│
+│                                                                 │
+│  ┌────────────────────────────┐ ┌──────────────────────────────┐│
+│  │ SLA PAR TYPE               │ │ DISTRIBUTION HORAIRE         ││
+│  │                            │ │                              ││
+│  │ Froid      ████████ 95%   │ │  [Heatmap 24h x 7j]          ││
+│  │ Materiel   ██████   85%   │ │                              ││
+│  │ Securite   ███████  90%   │ │  Pics: 8h-10h, 14h-16h       ││
+│  │ Infra      █████    78%   │ │                              ││
+│  └────────────────────────────┘ └──────────────────────────────┘│
+│                                                                 │
+│  TICKETS LES PLUS LENTS                                         │
+│  ┌─────────────────────────────────────────────────────────────┐│
+│  │ #0012 │ Renovation quai 3    │ 15 jours │ Infra     │ 🔴SLA ││
+│  │ #0028 │ Remplacement groupe  │ 8 jours  │ Froid     │ ⚠️    ││
+│  └─────────────────────────────────────────────────────────────┘│
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### 7. Liste des Tickets avec Recherche Avancee
+
+**URL:** `/tickets`
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  SOS   │ STEF Rungis ▼ │                        Jean D. ▼      │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  Tickets                                   [+ Nouveau ticket]   │
+│                                                                 │
+│  ┌─────────────────────────────────────────────────────────────┐│
+│  │ 🔍 Recherche texte...                                       ││
+│  │                                                             ││
+│  │ Statut        Urgence       Blocage       Type              ││
+│  │ [Tous ▼]      [Tous ▼]      [Tous ▼]      [Tous ▼]          ││
+│  │                                                             ││
+│  │ Lieu          Date debut    Date fin      ☐ SLA depasse     ││
+│  │ [Tous ▼]      [📅        ]  [📅        ]                    ││
+│  │                                                             ││
+│  │                    [Reinitialiser]  [Rechercher]            ││
+│  └─────────────────────────────────────────────────────────────┘│
+│                                                                 │
+│  127 tickets trouves                                            │
+│                                                                 │
+│  ┌─────────────────────────────────────────────────────────────┐│
+│  │ # │ Titre                    │Statut    │Urgence│Responsable││
+│  ├───┼──────────────────────────┼──────────┼───────┼───────────┤│
+│  │042│ Temperature chambre      │🟡Attente │🔴Haute│ M.Martin  ││
+│  │041│ Chariot panne            │🟢En cours│🟡Moy. │ P.Bernard ││
+│  │040│ Eclairage zone B         │✅Resolu  │🟢Basse│ L.Petit   ││
+│  │039│ Alarme incendie test     │✅Resolu  │🟡Moy. │ J.Dupont  ││
+│  └─────────────────────────────────────────────────────────────┘│
+│                                                                 │
+│  ◀ 1 2 3 4 5 ... 13 ▶                                          │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### 8. Creation de Ticket avec Templates
+
+**URL:** `/tickets/new`
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  ← Retour                            Nouveau ticket             │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  📋 UTILISER UN TEMPLATE                                        │
+│  ┌─────────────────────────────────────────────────────────────┐│
+│  │ Selectionner un template (optionnel)                    ▼  ││
+│  │ ├─ 🌡️ Probleme temperature chambre froide                  ││
+│  │ ├─ 🔧 Panne equipement manutention                         ││
+│  │ ├─ ⚡ Probleme electrique                                   ││
+│  │ └─ 🚨 Incident securite                                     ││
+│  └─────────────────────────────────────────────────────────────┘│
+│                                                                 │
+│  (Si double profil)                                             │
+│  ┌────────────────────────┐  ┌────────────────────────┐        │
+│  │ 🏭 TERRAIN             │  │ 🏢 ADMINISTRATIF       │        │
+│  │ [Selectionne]          │  │                        │        │
+│  └────────────────────────┘  └────────────────────────┘        │
+│                                                                 │
+│  INFORMATIONS DU PROBLEME                                       │
+│  ┌─────────────────────────────────────────────────────────────┐│
+│  │ Titre *                                                     ││
+│  │ [Temperature anormale chambre froide 2                    ] ││
+│  │                                                             ││
+│  │ Description *                                               ││
+│  │ [La temperature est montee a -12C au lieu de -18C requis. ]││
+│  │ [Alarme declenchee a 6h30 ce matin.                       ]││
+│  │                                                             ││
+│  │ Type de probleme *             Lieu *                       ││
+│  │ [Froid/Temperature    ▼]       [Chambre froide 2    ▼]     ││
+│  └─────────────────────────────────────────────────────────────┘│
+│                                                                 │
+│  NIVEAU D'URGENCE PROPOSE                                       │
+│  ┌───────────┐ ┌───────────┐ ┌───────────┐ ┌───────────┐       │
+│  │ ○ Basse   │ │ ○ Moyenne │ │ ● Haute   │ │ ○ Critique│       │
+│  └───────────┘ └───────────┘ └───────────┘ └───────────┘       │
+│                                                                 │
+│  IMPACT SUR L'ACTIVITE                                          │
+│  ○ Non bloquant     ● Partiellement bloquant     ○ Bloquant    │
+│                                                                 │
+│  📎 Ajouter des pieces jointes                                  │
+│                                                                 │
+│                          [Annuler]  [Creer le ticket]           │
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### 9. Detail Ticket avec Timeline
+
+**URL:** `/tickets/:id`
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  ← Retour    #0042                    [En attente] [🔴 Haute]   │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  Temperature anormale chambre froide 2                          │
+│                                                                 │
+│  ┌─────────────────────────────────────────────────────────────┐│
+│  │ ⚠️ Ce ticket attend validation par un niveau superieur      ││
+│  └─────────────────────────────────────────────────────────────┘│
+│                                                                 │
+│  [Details] [Historique] [Fichiers (2)]                          │
+│                                                                 │
+│  ┌─────────────────────────┐  ┌────────────────────────────────┐│
+│  │ INFORMATIONS            │  │ TIMELINE                       ││
+│  │                         │  │                                ││
+│  │ Type: Froid/Temperature │  │ 📝 Cree par Jean Dupont        ││
+│  │ Lieu: Chambre froide 2  │  │    27/01 07:15                 ││
+│  │ Urgence: Haute          │  │                                ││
+│  │ Blocage: Partiel        │  │ 💬 Commentaire ajoute          ││
+│  │                         │  │    J. Dupont - 07:30           ││
+│  │ Cree par:               │  │    "Alarme sonnait deja"       ││
+│  │ Jean Dupont             │  │                                ││
+│  │ Operateur - Terrain     │  │ 📎 Photo ajoutee               ││
+│  │                         │  │    J. Dupont - 07:32           ││
+│  │ Cree le: 27/01 07:15    │  │                                ││
+│  │ SLA: 28/01 19:15        │  │ ⏳ En attente validation       ││
+│  │                         │  │    depuis 2h                   ││
+│  └─────────────────────────┘  └────────────────────────────────┘│
+│                                                                 │
+│  DESCRIPTION                                                    │
+│  ┌─────────────────────────────────────────────────────────────┐│
+│  │ La temperature de la chambre froide 2 est montee a -12C    ││
+│  │ au lieu des -18C requis. L'alarme s'est declenchee a 6h30  ││
+│  │ ce matin. Les produits risquent d'etre compromis.          ││
+│  └─────────────────────────────────────────────────────────────┘│
+│                                                                 │
+│  COMMENTAIRES (2)                      [+ Ajouter commentaire]  │
+│  ┌─────────────────────────────────────────────────────────────┐│
+│  │ 👤 Jean Dupont • 27/01 07:30                                ││
+│  │    L'alarme sonnait deja a mon arrivee a 6h.               ││
+│  │                                                             ││
+│  │ 👤 Marie Martin • 27/01 08:45                               ││
+│  │    Technicien frigoriste contacte, intervention prevue.    ││
+│  └─────────────────────────────────────────────────────────────┘│
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### 10. Vue Syndicat
+
+**URL:** `/union`
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  SOS - Vue Syndicat                        Rep. Syndical ▼      │
+│  [Dashboard] [Tickets] [Statistiques]                           │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  Statistiques Syndicales - STEF Rungis                          │
+│                                                                 │
+│  ⚠️ Cette vue anonymise les donnees personnelles                │
+│                                                                 │
+│  ┌────────────┐  ┌────────────┐  ┌────────────┐  ┌────────────┐│
+│  │    127     │  │    89%     │  │     8      │  │    4.2j    ││
+│  │  Tickets   │  │  SLA OK    │  │ Critiques  │  │ Resolution ││
+│  │  ce mois   │  │            │  │  ce mois   │  │  moyenne   ││
+│  └────────────┘  └────────────┘  └────────────┘  └────────────┘│
+│                                                                 │
+│  REPARTITION PAR TYPE                                           │
+│  ┌─────────────────────────────────────────────────────────────┐│
+│  │  Temperature/Froid  ████████████████████  35%               ││
+│  │  Materiel           ████████████████      25%               ││
+│  │  Securite           ████████████          18%               ││
+│  │  Infrastructure     ████████              12%               ││
+│  │  Autre              ██████                10%               ││
+│  └─────────────────────────────────────────────────────────────┘│
+│                                                                 │
+│  TICKETS VISIBLES (anonymises)                                  │
+│  ┌─────────────────────────────────────────────────────────────┐│
+│  │ #0042 │ Temperature chambre froide │ En cours │ SLA: OK    ││
+│  │ #0038 │ Equipement securite        │ Resolu   │ 1j         ││
+│  │ #0035 │ Probleme eclairage         │ Resolu   │ 2j         ││
+│  └─────────────────────────────────────────────────────────────┘│
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### 11. Administration Entreprise
+
+**URL:** `/admin`
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│  SOS    [🛡️ Mode Admin]                        Admin ▼          │
+│  [Vue d'ensemble] [Agences] [Utilisateurs] [Logs] [Multi-Sites] │
+├─────────────────────────────────────────────────────────────────┤
+│                                                                 │
+│  Administration - STEF Logistics                                │
+│                                                                 │
+│  ┌────────────┐  ┌────────────┐  ┌────────────┐  ┌────────────┐│
+│  │     8      │  │    120     │  │    847     │  │    92%     ││
+│  │   Sites    │  │Utilisateurs│  │  Tickets   │  │  SLA OK    ││
+│  └────────────┘  └────────────┘  └────────────┘  └────────────┘│
+│                                                                 │
+│  SITES                                        [+ Nouveau site]  │
+│  ┌─────────────────────────────────────────────────────────────┐│
+│  │ Site           │ Utilisateurs │ Tickets │ SLA  │ Actions   ││
+│  ├────────────────┼──────────────┼─────────┼──────┼───────────┤│
+│  │ STEF Rungis    │      35      │   234   │ 94%  │ ⚙️ ✏️     ││
+│  │ STEF Lyon      │      28      │   189   │ 91%  │ ⚙️ ✏️     ││
+│  │ STEF Marseille │      22      │   156   │ 87%  │ ⚙️ ✏️     ││
+│  │ STEF Bordeaux  │      18      │   134   │ 96%  │ ⚙️ ✏️     ││
+│  └─────────────────────────────────────────────────────────────┘│
+│                                                                 │
+│  DEMANDES D'ACCES EN ATTENTE (3)                                │
+│  ┌─────────────────────────────────────────────────────────────┐│
+│  │ Marie Durand │ marie@email.com │ Rungis │ [✅] [❌]         ││
+│  │ Paul Martin  │ paul@email.com  │ Lyon   │ [✅] [❌]         ││
+│  └─────────────────────────────────────────────────────────────┘│
+│                                                                 │
+└─────────────────────────────────────────────────────────────────┘
+```
+
+### 12. Notifications Temps Reel
+
+**Dropdown dans le header**
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                                           🔔(3)  Jean D. ▼      │
+│                                    ┌────────────────────────────┐
+│                                    │ NOTIFICATIONS              │
+│                                    │                            │
+│                                    │ 🟢 Nouveau                 │
+│                                    │ Ticket #0045 cree          │
+│                                    │ il y a 2 min               │
+│                                    │                            │
+│                                    │ 🟡 Mis a jour              │
+│                                    │ Ticket #0042 valide        │
+│                                    │ il y a 15 min              │
+│                                    │                            │
+│                                    │ 🔴 Urgent                  │
+│                                    │ SLA depasse #0038          │
+│                                    │ il y a 1h                  │
+│                                    │                            │
+│                                    │ Voir toutes →              │
+│                                    └────────────────────────────┘
+└─────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
 ## Workflow des tickets
 
-### Cycle de vie d'un ticket
+### Cycle de vie
 
 ```
                     ┌─────────────┐
                     │   NOUVEAU   │
                     └──────┬──────┘
-                           │ Creation par Niv 0
+                           │ Creation
                            ▼
               ┌────────────────────────┐
               │  EN ATTENTE VALIDATION │
@@ -552,15 +837,41 @@ SOS est un systeme de ticketing concu pour gerer les incidents operationnels dan
                   └──────────┘
 ```
 
-### Actions par statut
+---
 
-| Statut | Qui peut agir | Actions disponibles |
-|--------|---------------|---------------------|
-| Nouveau | Createur | Modifier, Annuler |
-| En attente validation | Niveau N+1 | Valider, Escalader, Retourner |
-| En cours | Responsable | Resoudre, Escalader, Commenter |
-| Resolu | Createur/Responsable | Cloturer, Reouvrir |
-| Cloture | - | Consultation seule |
+## Fonctionnalites avancees
+
+### PWA (Progressive Web App)
+
+- Installation sur l'ecran d'accueil (mobile/desktop)
+- Fonctionnement hors-ligne (mode degrade)
+- Notifications push
+- Mise a jour automatique
+
+### WebSocket (Temps reel)
+
+- Notifications instantanees
+- Mise a jour des listes en direct
+- Indicateurs de connexion
+
+### Templates de tickets
+
+- Templates pre-configures par agence
+- Remplissage automatique des champs
+- Restriction par niveau hierarchique
+
+### Recherche avancee
+
+- Recherche full-text
+- Filtres multiples combinables
+- Sauvegarde des filtres
+
+### Analytics
+
+- KPIs avec comparaison de periodes
+- Graphiques de tendances
+- Heatmap de distribution horaire
+- Export des donnees
 
 ---
 
@@ -580,17 +891,25 @@ SOS est un systeme de ticketing concu pour gerer les incidents operationnels dan
 git clone <url-du-repo> sos
 cd sos
 
-# Lancer l'installation
-./install.sh
+# Configurer les variables d'environnement
+cp .env.example .env
+# Editer .env avec vos valeurs
+
+# Lancer les services
+docker-compose up -d
+
+# L'application est accessible sur:
+# - Frontend: http://localhost:3000
+# - API: http://localhost:3001
+# - Platform Admin: http://localhost:3000/platform/login
 ```
 
-### Acces
+### Acces par defaut
 
-| Service | URL | Description |
-|---------|-----|-------------|
-| Frontend | http://localhost:3000 | Application web |
-| API | http://localhost:3001/api | API REST |
-| Health | http://localhost:3001/api/health | Verification sante |
+| Interface | URL | Identifiants |
+|-----------|-----|--------------|
+| Platform Admin | `/platform/login` | `platform@sos.local` / `PlatformAdmin123!` |
+| Application | `/login` | Creer via code d'invitation |
 
 ---
 
@@ -603,35 +922,19 @@ cd sos
 POSTGRES_HOST=postgres
 POSTGRES_PORT=5432
 POSTGRES_USER=sos
-POSTGRES_PASSWORD=votre_mot_de_passe_securise
+POSTGRES_PASSWORD=votre_mot_de_passe
 POSTGRES_DB=sos
 
 # JWT
-JWT_SECRET=votre_secret_jwt_tres_long
-JWT_EXPIRES_IN=15m
+JWT_SECRET=votre_secret_jwt_securise
+JWT_EXPIRES_IN=24h
 JWT_REFRESH_EXPIRES_IN=7d
-
-# SMTP (optionnel)
-SMTP_HOST=smtp.votredomaine.com
-SMTP_PORT=587
-SMTP_USER=noreply@votredomaine.com
-SMTP_PASS=votre_mot_de_passe
-EMAIL_FROM=SOS <noreply@votredomaine.com>
 
 # Application
 NODE_ENV=production
 FRONTEND_URL=http://localhost:3000
+PORT=3001
 ```
-
-### Configuration par agence
-
-Chaque agence peut configurer :
-
-- **Niveaux hierarchiques** : Noms et permissions par niveau
-- **Types de problemes** : Categories avec niveau minimum requis
-- **Lieux** : Zones du site (terrain, administratif, commun)
-- **SLA** : Delais selon urgence et niveau de blocage
-- **Groupes de confidentialite** : Qui peut lire/ecrire
 
 ---
 
@@ -640,43 +943,56 @@ Chaque agence peut configurer :
 ### Authentification
 
 ```
-POST /api/auth/login          # Connexion
-POST /api/auth/logout         # Deconnexion
-POST /api/auth/refresh        # Rafraichir token
-GET  /api/auth/me             # Profil utilisateur
+POST /api/auth/login              # Connexion utilisateur
+POST /api/auth/logout             # Deconnexion
+POST /api/auth/refresh            # Rafraichir token
+GET  /api/auth/me                 # Profil utilisateur
+```
+
+### Platform Admin
+
+```
+POST /api/platform/auth/login     # Connexion admin plateforme
+GET  /api/platform/dashboard      # Dashboard plateforme
+GET  /api/platform/companies      # Liste entreprises
+POST /api/platform/companies      # Creer entreprise
+GET  /api/platform/invitations    # Liste codes invitation
+POST /api/platform/invitations    # Creer code invitation
+GET  /api/platform/admins         # Liste admins plateforme
+```
+
+### Registration
+
+```
+POST /api/register/validate-code  # Valider code invitation
+POST /api/register/company        # Inscrire entreprise
+POST /api/register/user           # Inscrire utilisateur
 ```
 
 ### Tickets
 
 ```
-GET    /api/tickets           # Liste (filtree par permissions)
-GET    /api/tickets/:id       # Detail
-POST   /api/tickets           # Creer
-PUT    /api/tickets/:id/validate  # Valider/Escalader/Retourner
-PUT    /api/tickets/:id/status    # Changer statut
+GET    /api/tickets               # Liste tickets
+GET    /api/tickets/:id           # Detail ticket
+POST   /api/tickets               # Creer ticket
+PUT    /api/tickets/:id           # Modifier ticket
 POST   /api/tickets/:id/comments  # Ajouter commentaire
-GET    /api/tickets/:id/history   # Historique
 ```
 
 ### Dashboard
 
 ```
-GET /api/dashboard/personal   # Personnel (tous)
-GET /api/dashboard/team       # Equipe (Niv 1+)
-GET /api/dashboard/site       # Site (Niv 2+)
-GET /api/dashboard/direction  # Direction (Niv 3)
-GET /api/dashboard/multi-sites # Multi-sites (Admin)
+GET /api/dashboard/personal       # Dashboard personnel
+GET /api/dashboard/team           # Dashboard equipe
+GET /api/dashboard/site           # Dashboard site
+GET /api/dashboard/analytics      # Analytics avances
 ```
 
-### Administration
+### Templates
 
 ```
-GET/POST   /api/admin/agencies              # Agences
-GET/POST   /api/admin/agencies/:id/levels   # Niveaux
-GET/POST   /api/admin/agencies/:id/problem-types  # Types
-GET/POST   /api/admin/agencies/:id/locations      # Lieux
-GET/PUT    /api/admin/agencies/:id/sla            # SLA
-GET/POST   /api/admin/users                 # Utilisateurs
+GET  /api/templates               # Liste templates
+POST /api/templates               # Creer template
 ```
 
 ---
@@ -685,59 +1001,61 @@ GET/POST   /api/admin/users                 # Utilisateurs
 
 ```
 SOS/
-├── backend/                    # API Node.js/Express
+├── backend/
 │   ├── src/
-│   │   ├── config/            # Configuration DB
-│   │   ├── database/          # Schema SQL
-│   │   ├── middlewares/       # Auth, permissions
-│   │   ├── routes/            # Endpoints API
-│   │   ├── services/          # Email, etc.
-│   │   └── index.js           # Point d'entree
-│   ├── Dockerfile
+│   │   ├── config/           # Configuration DB
+│   │   ├── database/         # Schema SQL
+│   │   ├── middlewares/      # Auth, permissions
+│   │   ├── routes/
+│   │   │   ├── platform/     # Routes admin plateforme
+│   │   │   ├── auth.js
+│   │   │   ├── tickets.js
+│   │   │   ├── dashboard.js
+│   │   │   └── ...
+│   │   ├── services/         # WebSocket, Email
+│   │   └── index.js
 │   └── package.json
 │
-├── frontend/                   # App React/Vite
+├── frontend/
 │   ├── src/
-│   │   ├── layouts/           # Auth, Main
-│   │   ├── pages/             # Toutes les pages
-│   │   │   ├── admin/         # Administration
-│   │   │   ├── dashboard/     # Tableaux de bord
-│   │   │   ├── tickets/       # Gestion tickets
-│   │   │   └── union/         # Vue syndicat
-│   │   ├── services/          # API client
-│   │   ├── store/             # Etat global (Zustand)
-│   │   └── App.jsx            # Router
-│   ├── Dockerfile
+│   │   ├── layouts/
+│   │   │   ├── MainLayout.jsx
+│   │   │   ├── AuthLayout.jsx
+│   │   │   └── PlatformLayout.jsx
+│   │   ├── pages/
+│   │   │   ├── platform/     # Pages admin plateforme
+│   │   │   ├── admin/        # Pages admin entreprise
+│   │   │   ├── tickets/
+│   │   │   ├── auth/
+│   │   │   └── ...
+│   │   ├── components/
+│   │   ├── services/
+│   │   │   ├── api.js
+│   │   │   ├── platformApi.js
+│   │   │   └── websocket.js
+│   │   ├── store/
+│   │   │   ├── authStore.js
+│   │   │   └── platformStore.js
+│   │   └── App.jsx
 │   └── package.json
 │
-├── docker-compose.yml          # Orchestration
-├── install.sh                  # Installation
-├── .env.example               # Variables env
-└── README.md                  # Documentation
+├── docker-compose.yml
+└── README.md
 ```
 
 ---
 
 ## Securite
 
+- **Architecture multi-tenant** : Isolation complete des donnees par entreprise
 - **Authentification** : JWT avec refresh tokens
-- **Permissions** : Basees sur niveau hierarchique et profile_type
-- **Audit trail** : Historique complet, pas de suppression
-- **Confidentialite** : Commentaires visibles selon groupe
+- **Permissions** : RBAC base sur niveau hierarchique
+- **Audit trail** : Historique complet des actions
 - **Rate limiting** : Protection contre les abus
-- **Headers** : Helmet pour securite HTTP
-
----
-
-## Support
-
-Pour signaler un bug ou demander une fonctionnalite :
-1. Verifier les issues existantes
-2. Creer une nouvelle issue avec description detaillee
-3. Inclure les logs si erreur
+- **Codes invitation** : Controle des inscriptions
 
 ---
 
 ## Licence
 
-Proprietaire - STEF - Tous droits reserves
+Proprietaire - Tous droits reserves
